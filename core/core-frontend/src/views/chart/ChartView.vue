@@ -124,7 +124,10 @@ useEmitt({
 </script>
 
 <template>
-  <Entrances v-if="appStore.getXpackValid" @init-iframe="initIframe"></Entrances>
+  <Entrances
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+    @init-iframe="initIframe"
+  ></Entrances>
   <div :style="iframeStyle">
     <component :is="currentComponent" v-if="showComponent"></component>
   </div>

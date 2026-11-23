@@ -226,7 +226,7 @@ onMounted(() => {
     <user-view-enlarge ref="userViewEnlargeRef"></user-view-enlarge>
   </div>
   <empty-background v-if="!state.initState" description="参数不能为空" img-type="noneWhite" />
-  <OpenHandler v-if="appStore.getXpackValid" ref="openHandler" />
+  <OpenHandler v-if="appStore.getXpackValid || appStore.getBluewingEnabled" ref="openHandler" />
 </template>
 
 <style lang="less" scoped>

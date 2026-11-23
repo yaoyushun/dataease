@@ -1,4 +1,5 @@
 import router from './router'
+import { bluewingSsoLoginApi } from '@/api/login'
 import { useUserStoreWithOut } from '@/store/modules/user'
 import { useAppStoreWithOut } from '@/store/modules/app'
 import type { RouteRecordRaw } from 'vue-router_2'
@@ -92,11 +93,41 @@ router.beforeEach(async (to, from, next) => {
   wsCache.set('TreeSort-backend', defaultSort['basic.defaultSort'] ?? '1')
   wsCache.set('open-backend', defaultSort['basic.defaultOpen'] ?? '0')
   wsCache.set('embeddedExportMode-backend', defaultSort['basic.embeddedExportMode'] ?? 'sync')
+  if (to.query.bwAccount && to.query.bwSig && to.query.bwTs) {
+    try {
+      const ssoRes = await bluewingSsoLoginApi({
+        account: to.query.bwAccount,
+        name: to.query.bwName || to.query.bwAccount,
+        orgName: to.query.bwOrg || '',
+        appId: to.query.bwAppId || '',
+        timestamp: Number(to.query.bwTs),
+        signature: to.query.bwSig
+      })
+      if (ssoRes?.data?.token) {
+        userStore.clear()
+        userStore.setToken(ssoRes.data.token)
+        if (ssoRes.data.exp) {
+          userStore.setExp(ssoRes.data.exp)
+        }
+        const cleanQuery = { ...to.query }
+        delete cleanQuery.bwAccount
+        delete cleanQuery.bwName
+        delete cleanQuery.bwOrg
+        delete cleanQuery.bwAppId
+        delete cleanQuery.bwTs
+        delete cleanQuery.bwSig
+        next({ path: to.path || '/', query: cleanQuery, replace: true })
+        return
+      }
+    } catch (e) {
+      console.error('Bluewing SSO failed', e)
+    }
+  }
   if ((wsCache.get('user.token') || isDesktop) && !to.path.startsWith('/de-link/')) {
     if (!userStore.getUid) {
       await userStore.setUser()
     }
-    if (to.path === '/login') {
+    if (to.path === '/login' || to.path === '/workbranch') {
       next({ path: '/workbranch/index' })
     } else {
       permissionStore.setCurrentPath(to.path)

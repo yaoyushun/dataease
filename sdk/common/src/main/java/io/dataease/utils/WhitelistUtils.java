@@ -50,6 +50,10 @@ public class WhitelistUtils {
             "/sysParameter/i18nOptions",
             "/login/modifyInvalidPwd",
             "/perSetting/hmac/info",
+            "/bluewing/features",
+            "/bluewing/sso-login",
+            "/embedded/getTokenArgs",
+            "/embedded/domainList",
             "/");
 
     private static final String[] FRONTEND_STATIC_PREFIXES = {"/js/", "/assets/"};

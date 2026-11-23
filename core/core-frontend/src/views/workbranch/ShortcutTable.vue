@@ -101,7 +101,7 @@ const getBusiListWithPermission = () => {
       busiFlagList.push(baseFlagList[parseInt(key)])
     }
   }
-  if (appStore.getXpackValid && pathValid('/spreadsheet/index')) {
+  if ((appStore.getXpackValid || appStore.getBluewingEnabled) && pathValid('/spreadsheet/index')) {
     busiFlagList.push('spreadsheet')
   }
   baseTablePaneList.value[0].disabled = !busiFlagList?.length
@@ -586,14 +586,21 @@ const getEmptyDesc = (): string => {
         </GridTable>
       </div>
     </template>
-    <TabPaneTable v-if="appStore.getXpackValid && activeName === 'data-filling'" />
+    <TabPaneTable
+      v-if="
+        (appStore.getXpackValid || appStore.getBluewingEnabled) && activeName === 'data-filling'
+      "
+    />
   </div>
   <el-empty
     class="dashboard-type"
     v-else
     :description="t('work_branch.administrator_for_authorization')"
   />
-  <TabPane v-if="appStore.getXpackValid" @loaded="loadedDataFilling" />
+  <TabPane
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+    @loaded="loadedDataFilling"
+  />
 </template>
 
 <style lang="less" scoped>

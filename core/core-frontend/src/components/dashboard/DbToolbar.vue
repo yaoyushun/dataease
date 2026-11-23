@@ -875,7 +875,10 @@ const userGroupShow = ref(false)
     <outer-params-set v-if="outerParamsSetShow" ref="outerParamsSetRef"> </outer-params-set>
   </div>
   <de-fullscreen show-position="edit" ref="fullScreeRef"></de-fullscreen>
-  <OpenHandler v-if="appStore.getXpackValid" ref="openHandler"></OpenHandler>
+  <OpenHandler
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+    ref="openHandler"
+  ></OpenHandler>
   <de-app-apply
     ref="resourceAppOpt"
     :component-data="componentData"

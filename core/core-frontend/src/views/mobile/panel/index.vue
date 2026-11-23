@@ -274,7 +274,10 @@ onBeforeUnmount(() => {
   <div class="panel-mobile">
     <de-preview-mobile v-if="panelInit"></de-preview-mobile>
   </div>
-  <Entrances v-if="appStore.getXpackValid" @initIframe="initIframe" />
+  <Entrances
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+    @initIframe="initIframe"
+  />
 </template>
 
 <style lang="less" scoped>

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { store } from '../index'
 import { useCache } from '@/hooks/web/useCache'
 const { wsCache } = useCache()
-import { modelApi } from '@/api/login'
+import { bluewingFeaturesApi, modelApi } from '@/api/login'
 import { xpackModelApi } from '@/api/plugin'
 interface AppState {
   size: boolean
@@ -16,6 +16,7 @@ interface AppState {
   arrowSide: boolean
   xpackValid: boolean
   xpackValidLoaded: boolean
+  bluewingEnabled: boolean
 }
 
 export const useAppStore = defineStore('app', {
@@ -31,7 +32,8 @@ export const useAppStore = defineStore('app', {
       desktop: false,
       arrowSide: false,
       xpackValid: false,
-      xpackValidLoaded: false
+      xpackValidLoaded: false,
+      bluewingEnabled: false
     }
   },
   getters: {
@@ -64,6 +66,9 @@ export const useAppStore = defineStore('app', {
     },
     getXpackValid(): boolean {
       return this.xpackValid
+    },
+    getBluewingEnabled(): boolean {
+      return this.bluewingEnabled
     }
   },
   actions: {
@@ -80,6 +85,12 @@ export const useAppStore = defineStore('app', {
       this.xpackValidLoaded = true
       const res = await xpackModelApi()
       this.xpackValid = res.data || false
+      try {
+        const bwRes = await bluewingFeaturesApi()
+        this.bluewingEnabled = Boolean(bwRes?.data?.enabled)
+      } catch (e) {
+        this.bluewingEnabled = false
+      }
     },
     async refreshXpackValid() {
       this.xpackValidLoaded = false

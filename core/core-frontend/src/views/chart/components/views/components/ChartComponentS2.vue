@@ -324,7 +324,7 @@ const debounceRender = debounce(() => {
       actualChart.render,
       actualChart.type
     ) as S2ChartView<any>
-    myChart = chartView.drawChart({
+    myChart = ((window as any)._renderBwKpiCard && (window as any)._renderBwKpiCard(containerId, toRaw(actualChart))) || chartView.drawChart({
       container: containerId,
       chart: toRaw(actualChart),
       chartObj: myChart,

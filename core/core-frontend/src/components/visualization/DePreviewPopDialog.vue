@@ -25,7 +25,7 @@
       />
     </div>
   </el-dialog>
-  <IframeSelf v-if="appStore.getXpackValid" ref="xpackIframe" />
+  <IframeSelf v-if="appStore.getXpackValid || appStore.getBluewingEnabled" ref="xpackIframe" />
 </template>
 
 <script setup lang="ts">

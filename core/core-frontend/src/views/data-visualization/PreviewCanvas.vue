@@ -218,7 +218,7 @@ onMounted(async () => {
     }
   })
   console.info('Preview Canvas init')
-  if (!props.outerId && appStore.getXpackValid) {
+  if (!props.outerId && (appStore.getXpackValid || appStore.getBluewingEnabled)) {
     await Promise.all([xpackReadyPromise, iframeReadyPromise])
   }
   console.info('Preview Canvas Promise End')
@@ -302,11 +302,15 @@ defineExpose({
       img-type="noneWhite"
     />
   </div>
-  <NewWindowHandler v-if="appStore.getXpackValid" @loaded="XpackLoaded" @load-fail="XpackLoaded">
+  <NewWindowHandler
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+    @loaded="XpackLoaded"
+    @load-fail="XpackLoaded"
+  >
   </NewWindowHandler>
 
   <Entrances
-    v-if="appStore.getXpackValid"
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
     @init-iframe="initIframe"
     @load-fail="initIframe"
   ></Entrances>

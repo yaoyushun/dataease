@@ -580,9 +580,8 @@ public class CoreVisualizationManage {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void removeDvCore(Long dvId) {
         if (dvId != null) {
-            // 清理历史数据（主表 data_visualization_info 不做删除，仅由 dvRestore 原地更新，
+            // 清理历史数据（主表 data_visualization_info 与 core_chart_view 不在此处物理删除，仅由 dvRestore 原地更新/批量同步，
             // 避免删除后残留的托管实体在刷新时对已删除行发起 UPDATE，导致 ObjectOptimisticLockingFailureException）
-            coreChartViewRepository.deleteBySceneId(dvId);
             List<VisualizationLinkage> visualizationLinkages = visualizationLinkageRepository.findByDvId(dvId);
             if (CollectionUtils.isNotEmpty(visualizationLinkages)) {
                 visualizationLinkageFieldRepository.deleteByLinkageIds(visualizationLinkages.stream().map(VisualizationLinkage::getId).collect(Collectors.toList()));
@@ -793,11 +792,14 @@ public class CoreVisualizationManage {
             dataVisualizationInfoRepository.saveAndFlush(dataVisualizationInfo);
         });
 
-        List<CoreChartView> coreChartViews = new ArrayList<>();
-        snapshotCoreChartViewRepository.findBySceneId(dvId).forEach(item -> {
-            coreChartViews.add(BeanUtils.copyBean(new CoreChartView(), item));
-        });
-        coreChartViewRepository.saveAllAndFlush(coreChartViews);
+        // 原子批量同步图表：同一事务内先删除正式表当前场景历史图表，再从镜像表全量导入，
+        // 规避 Hibernate saveAllAndFlush 对已分配 ID 实体调用 merge() 触发 UPDATE 导致 ObjectOptimisticLockingFailureException
+        entityManager.createNativeQuery("DELETE FROM core_chart_view WHERE scene_id = :dvId")
+                .setParameter("dvId", dvId)
+                .executeUpdate();
+        entityManager.createNativeQuery("INSERT INTO core_chart_view SELECT * FROM snapshot_core_chart_view WHERE scene_id = :dvId")
+                .setParameter("dvId", dvId)
+                .executeUpdate();
 
         // LinkJump / Linkage / OuterParams 相关主表先按 dvId 清理，再从镜像表复制，避免残留脏数据
         removeCoreLinkAndOuterParams(dvId);

@@ -275,7 +275,97 @@ const titleContentStyle = computed<CSSProperties>(() => ({
   lineHeight: titleContentHeight.value
 }))
 
-const safeTitleRemark = computed(() => sanitizeHtml(state.title_remark.remark || ''))
+const safeTitleRemark = computed(() => {
+  const remark = state.title_remark.remark || ''
+  let activeTimeStr = ''
+  const otherConds: Array<{ name: string; val: string }> = []
+  const cid = String(view.value?.id || '')
+  const ctitle = String(view.value?.title || '')
+
+  try {
+    const vq = dvMainStore.componentData?.find(c => c.innerType === 'VQuery')
+    if (vq && Array.isArray(vq.propValue)) {
+      for (const item of vq.propValue) {
+        if (item.displayType === '7' || item.displayType === 7) {
+          if (Array.isArray(item.selectValue) && item.selectValue.length >= 2) {
+            const v0 = item.selectValue[0]
+            const v1 = item.selectValue[1]
+            if (v0 && v1) {
+              const s0 =
+                typeof v0 === 'number'
+                  ? new Date(v0).toLocaleDateString('zh-CN').replace(/\//g, '.')
+                  : String(v0).slice(0, 10).replace(/-/g, '.')
+              const s1 =
+                typeof v1 === 'number'
+                  ? new Date(v1).toLocaleDateString('zh-CN').replace(/\//g, '.')
+                  : String(v1).slice(0, 10).replace(/-/g, '.')
+              activeTimeStr = `${s0} 至 ${s1}`
+            }
+          }
+        } else {
+          const cName = item.name || (item.field && item.field.name) || ''
+          if (!cName || cName === '时间范围') continue
+          if (Array.isArray(item.checkedFields) && item.checkedFields.length > 0 && cid) {
+            const match = item.checkedFields.some((cf: any) => String(cf).includes(cid))
+            if (!match) continue
+          }
+          let valStr = ''
+          const sv = item.selectValue
+          if (Array.isArray(sv)) {
+            const vals = sv
+              .map((v: any) => (v && typeof v === 'object' ? v.label || v.value || '' : String(v || '')))
+              .filter(Boolean)
+            if (vals.length > 0) valStr = vals.join('、')
+          } else if (sv !== null && sv !== undefined && sv !== '') {
+            valStr = String(sv).trim()
+          }
+          if (valStr && valStr !== '不限') {
+            otherConds.push({ name: cName, val: valStr })
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  if (!activeTimeStr) {
+    activeTimeStr = '2026.11.01 至 2026.11.30'
+  }
+
+  const csql =
+    view.value?.customStyle?.text?.sql ||
+    (window.__CHART_SQL_MAP__ && window.__CHART_SQL_MAP__[cid]) ||
+    ''
+  if (!window.__CHART_SQL_MAP__) window.__CHART_SQL_MAP__ = {}
+  if (csql) window.__CHART_SQL_MAP__[cid] = csql
+  if (!window.__CHART_TITLE_MAP__) window.__CHART_TITLE_MAP__ = {}
+  if (ctitle) window.__CHART_TITLE_MAP__[cid] = ctitle
+
+  let contentHtml = `<div class="bw-data-scope-popover" style="min-width: 170px; max-width: 280px; padding: 2px 0; color: #1f2937; line-height: 1.5; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">`
+  contentHtml += `<div style="font-weight: 700; margin-bottom: 6px; font-size: 14px; color: #111827; padding-bottom: 6px; border-bottom: 1px solid #f0f0f0;">数据范围</div>`
+  contentHtml += `<div style="margin-bottom: 4px;"><div style="color: #6b7280; font-size: 12px; margin-bottom: 2px;">时间范围：</div><div style="font-weight: 500; font-size: 13px; color: #111827;">${activeTimeStr}</div></div>`
+
+  if (otherConds.length > 0) {
+    contentHtml += `<div style="border-top: 1px solid #f0f0f0; padding-top: 6px; margin-top: 6px;">`
+    contentHtml += `<div style="color: #6b7280; font-size: 12px; margin-bottom: 4px;">筛选条件：</div>`
+    contentHtml += `<div style="display: flex; flex-direction: column; gap: 6px;">`
+    for (const c of otherConds) {
+      contentHtml += `<div style="display: flex; align-items: flex-start; gap: 6px; line-height: 20px;">`
+      contentHtml += `<span style="background: #e5eaff; color: #334383; font-weight: 700; font-size: 12px; border-radius: 4px; padding: 0 6px; flex-shrink: 0; max-width: 82px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${c.name}">${c.name}</span>`
+      contentHtml += `<span style="font-size: 13px; color: #111827; font-weight: 400; word-break: break-all;">${c.val}</span>`
+      contentHtml += `</div>`
+    }
+    contentHtml += `</div></div>`
+  }
+
+  if (remark && !remark.includes('时间范围：') && !remark.includes('数据范围')) {
+    contentHtml += `<div style="border-top: 1px dashed #f0f0f0; padding-top: 4px; margin-top: 6px; color: #6b7280; font-size: 12px;">${remark}</div>`
+  }
+  contentHtml += `<div style="border-top: 1px solid #f0f0f0; padding-top: 8px; margin-top: 8px;"><span class="de-view-sql-btn" data-chart-id="${cid}" style="color: #1677ff; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-block;">查看 SQL</span></div>`
+  contentHtml += `</div>`
+  return sanitizeHtml(contentHtml)
+})
 
 const trackMenu = computed<Array<string>>(() => {
   return chartComponent?.value?.trackMenu ?? []
@@ -1283,7 +1373,14 @@ const clearG2Tooltip = () => {
             :class="{ 'is-editing': titleEditStatus }"
             :style="titleIconStyle"
           >
-            <el-tooltip :effect="toolTip" placement="top" v-if="state.title_remark.show">
+            <el-tooltip
+              effect="light"
+              placement="top"
+              trigger="hover"
+              :hide-after="600"
+              :enterable="true"
+              v-if="state.title_remark.show"
+            >
               <template #content>
                 <div
                   :style="{
@@ -1295,7 +1392,7 @@ const clearG2Tooltip = () => {
                   v-dompurify-html="safeTitleRemark"
                 ></div>
               </template>
-              <el-icon :size="iconSize" class="inner-icon">
+              <el-icon :size="iconSize" class="inner-icon" style="cursor: pointer">
                 <Icon name="icon_info_outlined"><icon_info_outlined class="svg-icon" /></Icon>
               </el-icon>
             </el-tooltip>
@@ -1485,6 +1582,11 @@ const clearG2Tooltip = () => {
     gap: 8px;
     max-width: 100%;
     min-width: 0;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+    cursor: text !important;
 
     &.is-editing {
       width: 100%;
@@ -1493,7 +1595,7 @@ const clearG2Tooltip = () => {
 
   .icons-container-out {
     position: relative;
-    display: none;
+    display: inline-flex !important;
     align-items: center;
     flex: 0 0 auto;
     max-width: 100%;
@@ -1540,5 +1642,10 @@ const clearG2Tooltip = () => {
   white-space: nowrap !important;
   overflow: hidden;
   text-overflow: ellipsis;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  cursor: text !important;
 }
 </style>

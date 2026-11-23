@@ -7,6 +7,11 @@ export const queryDekey = () => request.get({ url: 'dekey' })
 
 export const modelApi = () => request.get({ url: 'model' })
 
+export const bluewingFeaturesApi = () => request.get({ url: '/bluewing/features' })
+
+export const bluewingSsoLoginApi = (data: Record<string, any>) =>
+  request.post({ url: '/bluewing/sso-login', data })
+
 export const platformLoginApi = (origin: number, token = '') => {
   const headers = platformLoginHeaders(token, origin)
   return request.post({ url: '/login/platformLogin/' + origin, headers }).finally(() => {

@@ -206,7 +206,7 @@ const handleInnerMouseDown = e => {
   ) {
     onClick()
     const target = e.target as Element | null
-    if (target?.classList.contains('ed-input__inner')) return
+    if (target?.classList.contains('ed-input__inner') || (target as any)?.closest?.('.title-container')) return
     e?.stopPropagation()
     e?.preventDefault()
   }
@@ -452,7 +452,8 @@ const freezeFlag = computed(() => {
     isMainCanvas(props.canvasId) &&
     config.value.freeze &&
     !isMobile() &&
-    scrollMain.value - config.value.style?.top > 0
+    (scrollMain.value - (config.value.style?.top || 0) > 0 ||
+      showPositionActive.value === 'preview')
   )
 })
 
@@ -699,9 +700,12 @@ onBeforeUnmount(() => {
 }
 
 .freeze-component {
-  position: fixed;
-  z-index: 1;
-  top: var(--top-show-offset) px !important;
-  left: var(--left-show-offset) px !important;
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 1000 !important;
+  width: 100% !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
 }
 </style>

@@ -1066,7 +1066,10 @@ const proxyAllowDrop = throttle((arg1, arg2) => {
                 :name="ele.name"
               ></el-tab-pane>
             </el-tabs>
-            <Pane v-if="appStore.getXpackValid" @loaded="panelLoad" />
+            <Pane
+              v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+              @loaded="panelLoad"
+            />
           </div>
         </div>
         <div class="dataset-table-info">
@@ -1139,12 +1142,12 @@ const proxyAllowDrop = throttle((arg1, arg2) => {
           <template v-if="['row', 'column'].includes(activeName)">
             <div class="table-row-column">
               <DatasetRowPermissions
-                v-if="appStore.getXpackValid"
+                v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
                 :active-name="activeName"
                 :dataset-id="nodeInfo.id"
               />
               <DatasetColumnPermissions
-                v-if="appStore.getXpackValid"
+                v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
                 :active-name="activeName"
                 :dataset-id="nodeInfo.id"
               />

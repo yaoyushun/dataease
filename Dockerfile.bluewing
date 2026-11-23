@@ -1,0 +1,4 @@
+FROM registry.cn-qingdao.aliyuncs.com/dataease/dataease:v3.2.1
+
+RUN rm -f /opt/apps/xpack-*.jar
+COPY core/core-backend/target/CoreApplication.jar /opt/apps/app.jar

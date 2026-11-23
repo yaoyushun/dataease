@@ -11,6 +11,7 @@ import io.dataease.utils.IPUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +22,7 @@ import static io.dataease.constant.CacheConstant.UserCacheConstant.USER_COMMUNIT
 
 @Component
 @ConditionalOnMissingBean(name = "userServer")
+@ConditionalOnProperty(name = "bluewing.use-substitute", havingValue = "true")
 @RestController
 @RequestMapping("/user")
 public class SubstituteUserServer {

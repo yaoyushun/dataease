@@ -987,9 +987,27 @@ const autoStyle = computed(() => {
 </script>
 
 <template>
-  <div class="v-query-container" ref="vQueryRef" :style="autoStyle" @keydown.stop @keyup.stop>
+  <div
+    class="v-query-container"
+    ref="vQueryRef"
+    :class="{
+      'has-title-horizontal':
+        customStyle.titleShow && !!customStyle.title && comLayout === 'horizontal'
+    }"
+    :style="autoStyle"
+    @keydown.stop
+    @keyup.stop
+  >
     <p v-if="customStyle.titleShow" class="title" :style="titleStyle">
-      {{ customStyle.title }}
+      <span class="title-main-text">{{ customStyle.title }}</span>
+      <span class="title-sub-icon" title="销售总监全维度KPI经营分析">
+        <svg style="width: 15px; height: 15px; fill: currentColor" viewBox="0 0 1024 1024">
+          <path
+            d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64z m0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z"
+          />
+          <path d="M464 688a48 48 0 1 0 96 0 48 48 0 1 0-96 0zM472 264h80v336h-80z" />
+        </svg>
+      </span>
     </p>
     <div
       :class="['v-query', comLayout, customStyle.titleShow && !!customStyle.title && 'title-show']"
@@ -1190,6 +1208,58 @@ const autoStyle = computed(() => {
     font-weight: 500;
     line-height: 22px;
     letter-spacing: -0.1px;
+  }
+
+  &.has-title-horizontal {
+    display: flex;
+    align-items: center;
+    overflow: visible;
+
+    .title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #1f2329;
+      line-height: 32px;
+      margin: 0 16px 0 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+
+      .title-sub-icon {
+        display: inline-flex;
+        align-items: center;
+        color: #86909c;
+        cursor: pointer;
+        transition: color 0.2s;
+        &:hover {
+          color: #3370ff;
+        }
+      }
+    }
+
+    .v-query {
+      flex: 1;
+      min-width: 0;
+      height: 100% !important;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      align-items: center;
+
+      &.title-show {
+        height: 100% !important;
+      }
+
+      .query-fields-container {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        width: 100%;
+        height: 100%;
+      }
+    }
   }
 }
 .v-query {
