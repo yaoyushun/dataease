@@ -73,7 +73,6 @@
                 v-model="state.watermarkForm.watermark_color"
                 :predefine="state.predefineColors"
                 is-custom
-                effect="light"
                 :trigger-width="80"
               />
             </el-form-item>

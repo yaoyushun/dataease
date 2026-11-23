@@ -187,7 +187,4 @@ public interface DataVisualizationApi {
 
     @Hidden
     List<DatasetPermissionTemplate> queruDatasetPermissionTemplate(Long resourceId);
-
-    @Hidden
-    List<DatasetPermissionTemplate> queryDatasetPermissionTemplates(List<Long> datasetIds);
 }

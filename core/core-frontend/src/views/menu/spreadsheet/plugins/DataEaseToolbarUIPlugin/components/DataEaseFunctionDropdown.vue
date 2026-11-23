@@ -15,7 +15,6 @@ type FunctionCategory = {
 const props = withDefaults(
   defineProps<{
     categories?: FunctionCategory[]
-    emptyText: string
     onChange?: (value: string) => void
   }>(),
   {
@@ -82,7 +81,7 @@ const handleFunctionClick = (item: FunctionItem) => {
       </el-scrollbar>
     </div>
 
-    <div v-else class="dataease-function-dropdown__empty">{{ emptyText }}</div>
+    <div v-else class="dataease-function-dropdown__empty">暂无可用函数</div>
   </div>
 </template>
 

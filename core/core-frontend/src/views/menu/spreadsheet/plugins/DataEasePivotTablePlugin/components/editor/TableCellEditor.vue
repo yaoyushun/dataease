@@ -13,7 +13,6 @@
             <div class="background-color-control">
               <el-color-picker
                 is-custom
-                effect="light"
                 :model-value="cellStyle.backgroundColor"
                 :disabled="!cellStyle.enable"
                 @change="value => updateCellStyle('backgroundColor', value || '')"
@@ -40,7 +39,6 @@
             <div class="zebra-color-field">
               <el-color-picker
                 is-custom
-                effect="light"
                 :model-value="cellStyle.zebraColor"
                 :disabled="!cellStyle.enable || !cellStyle.enableZebra || isMergeCell"
                 @change="value => updateCellStyle('zebraColor', value || '')"
@@ -53,7 +51,6 @@
             <div class="text-toolbar-row">
               <el-color-picker
                 is-custom
-                effect="light"
                 :model-value="cellStyle.textColor"
                 :disabled="!cellStyle.enable"
                 @change="value => updateCellStyle('textColor', value)"

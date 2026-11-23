@@ -1,4 +1,3 @@
-import { clearConfigRequestCaches } from '@/utils/configRequestCache'
 import { clearResourceImages } from '@/utils/resourceImageCache'
 import { clearBindings } from '@/utils/platformBinding'
 import { defineStore } from 'pinia'
@@ -6,8 +5,6 @@ import { store } from '../index'
 import { useCache } from '@/hooks/web/useCache'
 import { useLocaleStoreWithOut } from './locale'
 import { useLocale } from '@/hooks/web/useLocale'
-import { getBrowserLanguages, resolveLocale } from '@/utils/locale'
-import { requireSwitchLanguage } from '@/utils/languageSwitch'
 const { wsCache } = useCache()
 const { changeLocale } = useLocale()
 
@@ -74,16 +71,10 @@ export const userStore = defineStore('user', {
       const user = await import('@/api/user')
       const res = await user.userInfo()
       const data = res.data
-      const locale = useLocaleStoreWithOut()
-      const localeMap = await locale.getLocaleMap
-      data.language = resolveLocale(
-        [data.language, wsCache.get('user.language'), ...getBrowserLanguages()],
-        localeMap.map(item => item.lang)
-      )
       data.token = wsCache.get('user.token')
       data.exp = wsCache.get('user.exp')
       data.time = wsCache.get('user.time')
-      const keys: string[] = ['token', 'uid', 'name', 'oid', 'exp', 'time']
+      const keys: string[] = ['token', 'uid', 'name', 'oid', 'language', 'exp', 'time']
 
       keys.forEach(key => {
         const dkey = key === 'uid' ? 'id' : key
@@ -94,11 +85,11 @@ export const userStore = defineStore('user', {
       if (cachedProxyInfo) {
         this.proxyInfo = cachedProxyInfo
       }
-      const previousLanguage = locale.getCurrentLocale?.lang
-      await this.setLanguage(data.language)
-      if (previousLanguage !== this.language && !window.DataEaseBi) {
+      const locale = useLocaleStoreWithOut()
+      if (locale.getCurrentLocale?.lang !== this.language && !window.DataEaseBi) {
         window.location.reload()
       }
+      this.setLanguage(this.language)
     },
     setToken(token: string) {
       wsCache.set('user.token', token)
@@ -132,16 +123,17 @@ export const userStore = defineStore('user', {
       wsCache.set('user.proxyInfo', proxyInfo)
       this.proxyInfo = proxyInfo
     },
-    async setLanguage(language: string) {
+    setLanguage(language: string) {
       const locale = useLocaleStoreWithOut()
-      language = await requireSwitchLanguage(language)
-      language = await changeLocale(language)
+      if (!language || language === 'zh_CN') {
+        language = 'zh-CN'
+      }
       wsCache.set('user.language', language)
       this.language = language
       locale.setLang(language)
+      changeLocale(language as any)
     },
     clear() {
-      clearConfigRequestCaches()
       clearBindings()
       clearResourceImages()
       const keys: string[] = ['token', 'uid', 'name', 'oid', 'language', 'exp', 'time', 'proxyInfo']

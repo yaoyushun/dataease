@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { type CanvasIdentity, provideChartRuntimeCache } from '@/hooks/web/useChartRuntimeCache'
 import { getStyle } from '@/utils/style'
 import eventBus from '@/utils/eventBus'
 import {
@@ -179,18 +178,11 @@ const suspensionViewButtonAvailable = computed(
     dvMainStore.canvasStyleData.suspensionViewButtonAvailable === undefined ||
     dvMainStore.canvasStyleData.suspensionViewButtonAvailable
 )
-const chartRuntime = provideChartRuntimeCache(
-  () => props.viewInfo as Chart,
-  () => props.showPosition,
-  () => props.dvInfo as CanvasIdentity
-)
-const viewDemoInnerId = computed(
-  () => 'enlarge-inner-content-' + config.value.id + '-' + chartRuntime.id
-)
+const viewDemoInnerId = computed(() => 'enlarge-inner-content-' + config.value.id)
 const htmlToImage = () => {
   downLoading.value = true
   setTimeout(() => {
-    const vueDom = componentWrapperInnerRef.value
+    const vueDom = document.getElementById(viewDemoInnerId.value)
     activeWatermarkCheckUser(viewDemoInnerId.value, 'canvas-main', scale.value / 100)
     downloadCanvas2('img', vueDom, t('chart.chart'), () => {
       // do callback
@@ -214,7 +206,7 @@ const handleInnerMouseDown = e => {
   ) {
     onClick()
     const target = e.target as Element | null
-    if (target?.classList.contains('ed-input__inner')) return
+    if (target?.classList.contains('ed-input__inner') || (target as any)?.closest?.('.title-container')) return
     e?.stopPropagation()
     e?.preventDefault()
   }
@@ -460,7 +452,8 @@ const freezeFlag = computed(() => {
     isMainCanvas(props.canvasId) &&
     config.value.freeze &&
     !isMobile() &&
-    scrollMain.value - config.value.style?.top > 0
+    (scrollMain.value - (config.value.style?.top || 0) > 0 ||
+      showPositionActive.value === 'preview')
   )
 })
 
@@ -540,7 +533,6 @@ onBeforeUnmount(() => {
       }
     ]"
     :id="wrapperId"
-    :data-chart-runtime="chartRuntime.id"
     @mousedown="handleInnerMouseDown"
     @mouseenter="onMouseEnter"
     v-loading="downLoading"
@@ -569,7 +561,7 @@ onBeforeUnmount(() => {
       :show-position="showPositionActive"
       :class="{ 'wrapper-edit-bar-active': active }"
       @componentImageDownload="htmlToImage"
-      @userViewEnlargeOpen="opt => emits('userViewEnlargeOpen', opt, chartRuntime.snapshot())"
+      @userViewEnlargeOpen="opt => emits('userViewEnlargeOpen', opt)"
       @datasetParamsInit="() => emits('datasetParamsInit')"
     ></component-edit-bar>
     <component-selector
@@ -708,9 +700,12 @@ onBeforeUnmount(() => {
 }
 
 .freeze-component {
-  position: fixed;
-  z-index: 1;
-  top: var(--top-show-offset) px !important;
-  left: var(--left-show-offset) px !important;
+  position: sticky !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 1000 !important;
+  width: 100% !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
 }
 </style>

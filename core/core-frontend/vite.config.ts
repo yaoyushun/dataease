@@ -1,28 +1,19 @@
-import {
-  lazyRouteDevDependencies,
-  observedDevDependencies,
-  getElementPlusStyleDependencies
-} from './config/dev-dependencies'
-import common from './config/common'
-import base from './config/base'
-import distributed from './config/distributed'
-import dev from './config/dev'
-import pages from './config/pages'
+import common from './config/common';
+import base from './config/base';
+import distributed from './config/distributed';
+import dev from './config/dev';
+import lib from './config/lib';
+import pages from './config/pages';
 import { defineConfig, mergeConfig } from 'vite'
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({mode}) => {
   if (mode === 'dev') {
-    return mergeConfig(mergeConfig(common, mergeConfig(dev, pages)), {
-      optimizeDeps: {
-        include: [
-          ...getElementPlusStyleDependencies(),
-          ...lazyRouteDevDependencies,
-          ...observedDevDependencies
-        ]
-      }
-    })
+    return mergeConfig(common , mergeConfig(dev, pages))
   }
 
+  if (mode === 'lib') {
+    return mergeConfig(common , lib)
+  }
   if (mode === 'distributed') {
     return mergeConfig(common, mergeConfig(distributed, pages))
   }

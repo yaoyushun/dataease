@@ -49,7 +49,7 @@ import InfoTemplate from '@/views/system/common/InfoTemplate.vue'
 import { dsTypes } from '@/views/visualized/data/datasource/form/option'
 import { getDeEngine } from '@/api/datasource'
 import request from '@/config/axios'
-import { parseConfigurationJson } from '@/utils/encryption'
+import { symmetricDecryptJson } from '@/utils/encryption'
 import { useAppStoreWithOut } from '@/store/modules/app'
 const DatasourceDataFillingInfo = defineAsyncComponent(
   () => import('@/views/component/data-filling/DatasourceDataFillingInfo.vue')
@@ -82,7 +82,7 @@ const getEngine = () => {
     xPackInfo.value.enableDataFill = !!res.data.enableDataFill
     xPackInfo.value.type = type
     if (configuration) {
-      configuration = await parseConfigurationJson(configuration)
+      configuration = await symmetricDecryptJson(configuration)
     }
     nodeInfoId = id
     templateListTime.value = [
@@ -119,29 +119,18 @@ const getEngine = () => {
         type: '',
         sort: 0
       },
-      ...(type === 'h2'
-        ? [
-            {
-              pkey: t('data_source.jdbc_connection_string'),
-              pval: configuration?.jdbc || configuration?.jdbcUrl,
-              type: '',
-              sort: 0
-            }
-          ]
-        : [
-            {
-              pkey: type === 'StarRocks' ? 'FE ' + t('datasource.host') : 'datasource.host',
-              pval: configuration?.host,
-              type: '',
-              sort: 0
-            },
-            {
-              pkey: 'datasource.port',
-              pval: configuration?.port,
-              type: '',
-              sort: 0
-            }
-          ]),
+      {
+        pkey: type === 'StarRocks' ? 'FE ' + t('datasource.host') : 'datasource.host',
+        pval: configuration?.host,
+        type: '',
+        sort: 0
+      },
+      {
+        pkey: 'datasource.port',
+        pval: configuration?.port,
+        type: '',
+        sort: 0
+      },
       ...(type === 'StarRocks'
         ? [
             {

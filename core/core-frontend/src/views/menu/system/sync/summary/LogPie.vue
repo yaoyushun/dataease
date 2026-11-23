@@ -1,19 +1,16 @@
 <template>
-  <div ref="mainEcharts" style="width: auto; height: 300px" id="LogPieChart" v-loading="loading" />
+  <div ref="mainEcharts" style="width: auto; height: 300px" id="LogPieChart" v-loading="loading"/>
 </template>
 
 <script lang="ts" setup>
 import * as echarts from 'echarts'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { getJobLogLienChartInfo } from '@/api/sync/syncSummary'
-import { useI18n } from '@/hooks/web/useI18n'
-const { t } = useI18n()
+import {computed, onMounted, onUnmounted, ref} from 'vue'
+import {getJobLogLienChartInfo} from '@/api/sync/syncSummary'
+import { useI18n } from "@/hooks/web/useI18n";
+const {t} = useI18n()
 const loading = ref<boolean>(false)
 let resizeObserver: ResizeObserver | null = null,
-  canResize = true
-let myChart: echarts.ECharts | null = null
-let resizeTimer: ReturnType<typeof setTimeout> | undefined
-let disposed = false
+    canResize = true
 const data = ref({
   successCount: 0,
   failCount: 0,
@@ -21,7 +18,6 @@ const data = ref({
 })
 const getChartData = () => {
   getJobLogLienChartInfo().then(res => {
-    if (disposed) return
     data.value = res.data
     echartsInit()
   })
@@ -33,7 +29,7 @@ const option = computed(() => {
       text: t('sync_summary.sync_status_distribution'),
       textStyle: {
         overflow: 'break'
-      }
+      },
     },
     tooltip: {
       trigger: 'item'
@@ -42,9 +38,9 @@ const option = computed(() => {
       type: 'scroll',
       orient: 'horizontal',
       bottom: 'bottom',
-      icon: 'circle',
-      itemHeight: 8,
-      itemWidth: 8
+      icon:'circle',
+      itemHeight:8,
+      itemWidth:8,
     },
     series: [
       {
@@ -64,7 +60,7 @@ const option = computed(() => {
             if (param.dataIndex === 2) {
               color = '{running|}'
             }
-            return color + ' ' + param.name + '：' + param.percent + '%\n\n'
+            return  color+' '+param.name + '：' + param.percent + '%\n\n'
           },
           rich: {
             success: {
@@ -88,18 +84,20 @@ const option = computed(() => {
           }
         },
         labelLayout: function (params) {
-          const isLeft = params.labelRect.x < myChart!.getWidth() / 2
-          const points = params.labelLinePoints
+          const isLeft = params.labelRect.x < myChart.getWidth() / 2;
+          const points = params.labelLinePoints;
           // Update the end point.
-          points[2][0] = isLeft ? params.labelRect.x : params.labelRect.x + params.labelRect.width
+          points[2][0] = isLeft
+              ? params.labelRect.x
+              : params.labelRect.x + params.labelRect.width;
           return {
             labelLinePoints: points
-          }
+          };
         },
         data: [
-          { value: data.value.successCount, name: t('sync_task.status_success') },
-          { value: data.value.failCount, name: t('sync_task.status_failed') },
-          { value: data.value.runningCount, name: t('sync_task.status_running') }
+          {value: data.value.successCount, name: t('sync_task.status_success')},
+          {value: data.value.failCount, name: t('sync_task.status_failed')},
+          {value: data.value.runningCount, name: t('sync_task.status_running')}
         ],
         emphasis: {
           itemStyle: {
@@ -116,14 +114,11 @@ const option = computed(() => {
 onMounted(() => {
   getChartData()
 })
-onBeforeUnmount(() => {
-  disposed = true
+onUnmounted(() => {
   resizeObserver?.disconnect()
-  if (resizeTimer !== undefined) clearTimeout(resizeTimer)
-  myChart?.dispose()
-  myChart = null
 })
 const mainEcharts = ref()
+let myChart;
 const echartsInit = () => {
   myChart = echarts.init(mainEcharts.value)
   myChart.setOption(option.value)
@@ -133,9 +128,9 @@ const echartsInit = () => {
       return
     }
     canResize = false
-    resizeTimer = setTimeout(() => {
+    setTimeout(() => {
       canResize = true
-      myChart?.resize()
+      myChart.resize()
     }, 500)
   })
   targetElement && resizeObserver.observe(targetElement)

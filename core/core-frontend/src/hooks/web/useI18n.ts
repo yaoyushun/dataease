@@ -1,4 +1,4 @@
-import { i18n } from '@/plugins/vue-i18n/instance'
+import { i18n } from '@/plugins/vue-i18n'
 
 type I18nGlobalTranslation = {
   (key: string): string
@@ -26,15 +26,25 @@ export const useI18n = (
 ): {
   t: I18nGlobalTranslation
 } => {
+  const normalFn = {
+    t: (key: string) => {
+      return getKey(namespace, key)
+    }
+  }
+
+  if (!i18n) {
+    return normalFn
+  }
+
+  const { t, ...methods } = i18n.global
+
   const tFn: I18nGlobalTranslation = (key: string, ...arg: any[]) => {
     if (!key) return ''
     if (!key.includes('.') && !namespace) return key
-    if (!i18n) return getKey(namespace, key)
-    const { t } = i18n.global
     return (t as any)(getKey(namespace, key), ...(arg as I18nTranslationRestParameters))
   }
   return {
-    ...i18n?.global,
+    ...methods,
     t: tFn
   }
 }

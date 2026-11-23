@@ -513,13 +513,14 @@ export const exportExcelDownload = (chart, preFix, callBack?) => {
   }
   const excelName = getChartExcelTitle(preFix, chart.title)
   const viewInfo = toRaw(chart)
-  const { data: _viewData, ...exportViewInfo } = viewInfo as any
-  exportViewInfo.customAttr = cloneDeep(viewInfo.customAttr)
   let request: any = {
     proxy: null,
     dvId: chart.sceneId,
     viewId: chart.id,
-    viewInfo: exportViewInfo,
+    viewInfo: {
+      ...viewInfo,
+      customAttr: cloneDeep(viewInfo.customAttr)
+    },
     viewName: excelName,
     busiFlag: chart.busiFlag,
     downloadType: chart.downloadType
@@ -536,10 +537,9 @@ export const exportExcelDownload = (chart, preFix, callBack?) => {
     }
   } else {
     const req = getExcelDownloadRequest(chart.data, chart.type)
-    const { details: _details, ...exportReq } = req
     request = {
       ...request,
-      ...exportReq
+      ...req
     }
   }
 

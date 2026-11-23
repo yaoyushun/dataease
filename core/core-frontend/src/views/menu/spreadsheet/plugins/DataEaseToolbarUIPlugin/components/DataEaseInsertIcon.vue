@@ -1,9 +1,3 @@
-<script setup lang="ts">
-defineProps<{
-  label: string
-}>()
-</script>
-
 <template>
   <span class="dataease-insert-icon">
     <span class="dataease-insert-icon__top">
@@ -20,7 +14,7 @@ defineProps<{
         />
       </svg>
     </span>
-    <span class="dataease-insert-icon__label">{{ label }}</span>
+    <span class="dataease-insert-icon__label">插入</span>
   </span>
 </template>
 

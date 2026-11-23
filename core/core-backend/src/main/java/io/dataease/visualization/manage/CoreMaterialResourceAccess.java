@@ -6,19 +6,13 @@ import io.dataease.api.permissions.auth.api.InteractiveAuthApi;
 import io.dataease.api.permissions.auth.dto.BusiPerCheckDTO;
 import io.dataease.constant.*;
 import io.dataease.dao.auto.entity.DataVisualizationInfo;
-import io.dataease.dao.auto.repo.PerBusiResourceRepository;
 import io.dataease.exception.DEException;
-import io.dataease.license.utils.LicenseUtil;
-import io.dataease.model.BusiNodeRequest;
-import io.dataease.model.BusiNodeVO;
 import io.dataease.result.ResultCode;
 import io.dataease.permission.util.V3UserUtil;
 import io.dataease.utils.MaterialReferences;
-import io.dataease.utils.ServletUtils;
 import io.dataease.visualization.dao.auto.mapper.*;
 import io.dataease.template.dao.auto.mapper.VisualizationTemplateRepository;
 import jakarta.annotation.Resource;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import java.util.*;
@@ -28,19 +22,11 @@ public class CoreMaterialResourceAccess implements MaterialResourceAccess {
     @Resource private DataVisualizationInfoRepository resources;
     @Resource private SnapshotDataVisualizationInfoRepository snapshots;
     @Resource private VisualizationTemplateRepository templates;
-    @Resource private PerBusiResourceRepository registeredResources;
-    private final ObjectProvider<InteractiveAuthApi> authProvider;
-
-    public CoreMaterialResourceAccess(ObjectProvider<InteractiveAuthApi> authProvider) {
-        this.authProvider = authProvider;
-    }
+    @Resource private InteractiveAuthApi auth;
 
     @Override
     public Set<Long> authorize(MaterialContext context, boolean edit) {
         if (context == null) throw denied();
-        boolean embedded = ServletUtils.isEmbeddedRequest();
-        if (embedded && (edit || context.getResourceId() == null || context.getTemplateId() != null
-                || !"core".equals(context.getResourceTable()))) throw denied();
         if (context.getTemplateId() != null) {
             // Templates use the existing authenticated global template catalogue.
             if (V3UserUtil.getUid() == null || V3UserUtil.getLink() != null || edit) throw denied();
@@ -56,22 +42,19 @@ public class CoreMaterialResourceAccess implements MaterialResourceAccess {
             if (!edit || V3UserUtil.getUid() == null || V3UserUtil.getLink() != null
                     || !("dashboard".equals(context.getResourceType()) || "dataV".equals(context.getResourceType()))) throw denied();
             boolean screen = "dataV".equals(context.getResourceType());
-            BusiResourceEnum type = screen ? BusiResourceEnum.SCREEN : BusiResourceEnum.PANEL;
             Long parentId = context.getParentId();
             if (parentId == null || parentId == 0L) {
+                // New canvases can choose their destination on first save; no folder ID exists yet.
                 long menuId = (screen ? AuthResourceEnum.SCREEN : AuthResourceEnum.PANEL).getMenuId();
-                InteractiveAuthApi auth = requireAuth();
-                if (!auth.menuIds().contains(menuId) || !hasWritableDestination(auth, type)) throw denied();
+                if (!auth.menuIds().contains(menuId)) throw denied();
             } else {
-                requireAuth().checkAuth(new BusiPerCheckDTO(parentId, type, AuthEnum.MANAGE));
+                auth.checkAuth(new BusiPerCheckDTO(parentId,
+                        screen ? BusiResourceEnum.SCREEN : BusiResourceEnum.PANEL, AuthEnum.MANAGE));
             }
             return Set.of();
         }
         DataVisualizationInfo resource = resources.findById(context.getResourceId()).orElseThrow(this::denied);
         if (!Set.of("dashboard", "dataV").contains(resource.getType())) throw denied();
-        if (embedded && (Boolean.TRUE.equals(resource.getDeleteFlag()) || !"leaf".equals(resource.getNodeType())
-                || !(Objects.equals(resource.getStatus(), CommonConstants.DV_STATUS.PUBLISHED)
-                || Objects.equals(resource.getStatus(), CommonConstants.DV_STATUS.SAVED_UNPUBLISHED)))) throw denied();
         boolean draft = "snapshot".equals(context.getResourceTable());
         if (!draft && !"core".equals(context.getResourceTable())) throw denied();
         var link = V3UserUtil.getLink();
@@ -83,14 +66,11 @@ public class CoreMaterialResourceAccess implements MaterialResourceAccess {
             if (permissions.creatorPermissions(resource.getId()) == 0) throw denied();
         } else {
             if (V3UserUtil.getUid() == null) throw denied();
-            if (!LicenseUtil.licenseValid()) {
-                requireCommunityResource(resource, edit);
-            } else if (!(edit && Objects.equals(resource.getPid(), -1L)
-                    && Objects.equals(resource.getCreateBy(), V3UserUtil.getUid().toString()))) {
-                requireAuth().checkAuth(new BusiPerCheckDTO(resource.getId(),
-                        "dataV".equals(resource.getType()) ? BusiResourceEnum.SCREEN : BusiResourceEnum.PANEL,
-                        edit || draft ? AuthEnum.MANAGE : AuthEnum.READ));
-            }
+            if (!(edit && Objects.equals(resource.getPid(), -1L)
+                    && Objects.equals(resource.getCreateBy(), V3UserUtil.getUid().toString())))
+            auth.checkAuth(new BusiPerCheckDTO(resource.getId(),
+                    "dataV".equals(resource.getType()) ? BusiResourceEnum.SCREEN : BusiResourceEnum.PANEL,
+                    edit || draft ? AuthEnum.MANAGE : AuthEnum.READ));
         }
         if (draft) {
             var snapshot = snapshots.findById(resource.getId()).orElseThrow(this::denied);
@@ -128,7 +108,7 @@ public class CoreMaterialResourceAccess implements MaterialResourceAccess {
                     .require(io.dataease.share.manage.ShareVisitorPermissionManage.EXPORT_IMAGE);
         } else {
             DataVisualizationInfo resource = resources.findById(context.getResourceId()).orElseThrow(this::denied);
-            requireAuth().checkAuth(new BusiPerCheckDTO(resource.getId(),
+            auth.checkAuth(new BusiPerCheckDTO(resource.getId(),
                     "dataV".equals(resource.getType()) ? BusiResourceEnum.SCREEN : BusiResourceEnum.PANEL,
                     AuthEnum.EXPORT));
         }
@@ -153,46 +133,6 @@ public class CoreMaterialResourceAccess implements MaterialResourceAccess {
             if (batch.stream().anyMatch(value -> MaterialReferences.collect(value.getTemplateStyle(), value.getTemplateData()).contains(materialId))) return true;
             if (!batch.hasNext()) return false;
         }
-    }
-
-    private void requireCommunityResource(DataVisualizationInfo resource, boolean edit) {
-        Long uid = V3UserUtil.getUid();
-        boolean ownDraft = edit && Objects.equals(resource.getPid(), -1L)
-                && Objects.equals(resource.getCreateBy(), String.valueOf(uid));
-        // Community trees exclude registered enterprise resources, even after a license expires.
-        if (!Objects.equals(uid, 1L) || V3UserUtil.getProxy().isProxy()
-                || Boolean.TRUE.equals(resource.getDeleteFlag()) || !"leaf".equals(resource.getNodeType())
-                || (Objects.equals(resource.getPid(), -1L) && !ownDraft)
-                || registeredResources.existsById(resource.getId())) {
-            throw denied();
-        }
-    }
-
-    private boolean hasWritableDestination(InteractiveAuthApi auth, BusiResourceEnum type) {
-        // A new canvas may choose its destination on first save. A menu grants no write access.
-        var request = new BusiNodeRequest();
-        request.setBusiFlag(type.name());
-        request.setResourceTable("core");
-        request.setLeaf(false);
-        request.setWeight(AuthEnum.MANAGE.getWeight());
-        return hasWritableFolder(auth.resource(request));
-    }
-
-    private boolean hasWritableFolder(List<BusiNodeVO> nodes) {
-        if (nodes == null) return false;
-        for (BusiNodeVO node : nodes) {
-            if ((Boolean.FALSE.equals(node.getLeaf()) && node.getWeight() != null
-                    && node.getWeight() >= AuthEnum.MANAGE.getWeight()) || hasWritableFolder(node.getChildren())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private InteractiveAuthApi requireAuth() {
-        InteractiveAuthApi auth = authProvider.getIfAvailable();
-        if (auth == null) throw denied();
-        return auth;
     }
 
     private DEException denied() {

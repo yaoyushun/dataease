@@ -9,7 +9,6 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 public class ServletUtils {
-    private static final String EMBEDDED_REQUEST = ServletUtils.class.getName() + ".embeddedRequest";
 
     public static HttpServletRequest request() {
         ServletRequestAttributes servletRequestAttributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
@@ -31,16 +30,6 @@ public class ServletUtils {
 
     public static String getToken() {
         return getHead(AuthConstant.TOKEN_KEY);
-    }
-
-    /** Call only after authenticating an embedded identity. */
-    public static void markEmbeddedRequest(HttpServletRequest request) {
-        if (request != null) request.setAttribute(EMBEDDED_REQUEST, Boolean.TRUE);
-    }
-
-    public static boolean isEmbeddedRequest() {
-        HttpServletRequest request = request();
-        return request != null && Boolean.TRUE.equals(request.getAttribute(EMBEDDED_REQUEST));
     }
 
     public static String getXUserinfo() {

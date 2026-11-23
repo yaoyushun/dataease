@@ -68,12 +68,11 @@ function getCustomTime(
   around: string,
   arbitraryTime?: Date,
   timeGranularityMultiple?: string,
-  sort?: string,
-  baseline?: Date
+  sort?: string
 ) {
   const type = around === 'f' ? 'subtract' : 'add'
 
-  const result = dayjs(baseline)[type](timeNum, timeType === 'date' ? 'day' : timeType)
+  const result = dayjs()[type](timeNum, timeType === 'date' ? 'day' : timeType)
 
   if (['monthrange', 'yearrange', 'daterange'].includes(timeGranularityMultiple)) {
     return getYearMonthRange(result, sort, timeGranularityMultiple.split('range')[0])

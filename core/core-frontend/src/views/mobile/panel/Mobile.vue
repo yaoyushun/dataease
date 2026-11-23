@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { useLatestQuery } from '@/hooks/web/useQueryScope'
-const canvasQuery = useLatestQuery('canvas-load')
 import { reactive } from 'vue'
 import icon_collection_outlined from '@/assets/svg/icon_collection_outlined.svg'
 import visualStar from '@/assets/svg/visual-star.svg'
@@ -38,7 +36,7 @@ const loadCanvasData = (dvId, weight?) => {
   dataInitState.value = false
   initCanvasDataMobile(
     dvId,
-    { busiFlag: 'dashboard', queryRequest: canvasQuery.start() },
+    'dashboard',
     function ({
       canvasDataResult,
       canvasStyleResult,

@@ -27,7 +27,6 @@ public class WhitelistUtils {
             "/apisix/check",
             "/dekey",
             "/index.html",
-            "/dataease.svg",
             "/model",
             "/xpackModel",
             "/swagger-resources",
@@ -51,12 +50,13 @@ public class WhitelistUtils {
             "/sysParameter/i18nOptions",
             "/login/modifyInvalidPwd",
             "/perSetting/hmac/info",
-            "/perSetting/hmac/exchange",
+            "/bluewing/features",
+            "/bluewing/sso-login",
+            "/embedded/getTokenArgs",
+            "/embedded/domainList",
             "/");
 
-    // TinyMCE loads its language and skin files through browser tags without authentication headers.
-    private static final String[] FRONTEND_STATIC_PREFIXES = {
-            "/js/", "/assets/", "/tinymce-dataease-private/"};
+    private static final String[] FRONTEND_STATIC_PREFIXES = {"/js/", "/assets/"};
 
     private static final String[] FRONTEND_STATIC_SUFFIXES = {
             ".js", ".css", ".svg", ".png", ".jpg", ".ico", ".js.map", ".otf", ".ttf", ".woff2"};

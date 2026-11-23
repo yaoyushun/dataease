@@ -31,14 +31,14 @@ const mobileStatusChange = (type, value) => {
   if (type === 'componentStyleChange') {
     changeTimes.value++
   }
-  const iframeWindow = newWindow.value?.contentWindow
-  if (iframeWindow && iframeOrigin.value) {
-    iframeWindow.postMessage(
+  const iframe = document.querySelector('iframe')
+  if (iframe) {
+    iframe.contentWindow.postMessage(
       {
         type,
         value
       },
-      iframeOrigin.value
+      '*'
     )
   }
 }
@@ -48,14 +48,6 @@ const iframeSrc = computed(() => {
   return embeddedStore.baseUrl
     ? `${embeddedStore.baseUrl}mobile.html#/panel`
     : './mobile.html#/panel'
-})
-const iframeOrigin = computed(() => {
-  try {
-    const url = new URL(iframeSrc.value, document.baseURI)
-    return ['http:', 'https:'].includes(url.protocol) ? url.origin : ''
-  } catch {
-    return ''
-  }
 })
 const handleLoad = () => {
   const mobileViewInfo = JSON.parse(JSON.stringify(unref(canvasViewInfo)))
@@ -88,7 +80,7 @@ const componentDataNotInMobile = computed(() => {
   return componentData.value.filter(ele => !ele.inMobile)
 })
 
-const newWindow = ref<HTMLIFrameElement | null>(null)
+const newWindow = ref()
 
 // 同步整个 Tab 时携带各子组件的完整 viewInfo，普通组件仍使用原来的单对象格式
 const syncPcViewInfoToMobile = targetComponent => {
@@ -117,19 +109,7 @@ const syncPcViewInfoToMobile = targetComponent => {
   return targetComponent.component === 'DeTabs' ? viewInfos : viewInfos[0]
 }
 
-const hanedleMessage = (event: MessageEvent) => {
-  const iframeWindow = newWindow.value?.contentWindow
-  if (
-    !iframeWindow ||
-    !iframeOrigin.value ||
-    event.source !== iframeWindow ||
-    event.origin !== iframeOrigin.value ||
-    !event.data ||
-    typeof event.data !== 'object' ||
-    Array.isArray(event.data)
-  ) {
-    return
-  }
+const hanedleMessage = event => {
   if (
     event.data?.msgOrigin === 'de-fit2cloud' &&
     !!embeddedStore.token &&
@@ -139,7 +119,8 @@ const hanedleMessage = (event: MessageEvent) => {
       embeddedToken: embeddedStore.token
     }
     params['de-embedded'] = true
-    iframeWindow.postMessage(params, iframeOrigin.value)
+    const contentWindow = newWindow.value.contentWindow
+    contentWindow.postMessage(params, '*')
     return
   }
   if (event.data.type === 'panelInit') {

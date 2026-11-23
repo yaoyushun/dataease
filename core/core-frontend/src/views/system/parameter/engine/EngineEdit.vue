@@ -11,7 +11,7 @@ import { cloneDeep } from 'lodash-es'
 import { getDeEngine, getSchema } from '@/api/datasource'
 import { CustomPassword } from '@/components/custom-password'
 import { Base64 } from 'js-base64'
-import { parseConfigurationJson } from '@/utils/encryption'
+import { symmetricDecryptJson } from '@/utils/encryption'
 import { Icon } from '@/components/icon-custom'
 import { useAppStoreWithOut } from '@/store/modules/app'
 const DatasourceEnableDataFilling = defineAsyncComponent(
@@ -243,7 +243,7 @@ const edit = () => {
         enableDataFill
       } = res.data
       if (configuration) {
-        configuration = await parseConfigurationJson(configuration)
+        configuration = await symmetricDecryptJson(configuration)
       }
       Object.assign(nodeInfo, {
         name,
@@ -497,8 +497,6 @@ defineExpose({
       </el-form-item>
       <el-form-item :label="t('datasource.password')">
         <CustomPassword
-          :reveal-resource-id="nodeInfo.id"
-          reveal-secret-type="ENGINE_PASSWORD"
           :placeholder="t('common.inputText') + t('datasource.password')"
           show-password
           type="password"

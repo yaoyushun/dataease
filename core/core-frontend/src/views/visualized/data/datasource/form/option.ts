@@ -1,5 +1,4 @@
 import { useI18n } from '@/hooks/web/useI18n'
-import { isDesktop } from '@/utils/ModelUtil'
 const { t } = useI18n()
 
 export const dsTypes = [
@@ -116,16 +115,6 @@ export const dsTypes = [
     catalog: 'DL',
     extraParams: ''
   },
-  ...(isDesktop()
-    ? [
-        {
-          type: 'h2',
-          name: 'H2',
-          catalog: 'OLTP',
-          extraParams: ''
-        }
-      ]
-    : []),
   {
     type: 'API',
     name: 'API',
@@ -157,7 +146,6 @@ export const nameMap = {
 
 export interface Configuration {
   dataBase: string
-  jdbc?: string
   jdbcUrl: string
   urlType: string
   connectionType: string
@@ -212,7 +200,6 @@ export interface Node {
   name: string
   createBy: string
   creator: string
-  copySourceId?: string | number
   copy: boolean
   createTime: string
   id: number | string

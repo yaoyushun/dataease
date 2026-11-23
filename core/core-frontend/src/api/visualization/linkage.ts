@@ -1,4 +1,3 @@
-import type { QueryRequest } from '@/config/axios/queryScope'
 import request from '@/config/axios'
 
 export const getViewLinkageGather = data =>
@@ -9,15 +8,8 @@ export const getViewLinkageGatherArray = data =>
 
 export const saveLinkage = data => request.post({ url: '/linkage/saveLinkage', data })
 
-export const getPanelAllLinkageInfo = (
-  dvId,
-  resourceTable = 'snapshot',
-  queryRequest?: QueryRequest
-) =>
-  request.get({
-    url: '/linkage/getVisualizationAllLinkageInfo/' + dvId + '/' + resourceTable,
-    queryRequest
-  })
+export const getPanelAllLinkageInfo = (dvId, resourceTable = 'snapshot') =>
+  request.get({ url: '/linkage/getVisualizationAllLinkageInfo/' + dvId + '/' + resourceTable })
 
 export const updateLinkageActive = data =>
   request.post({ url: '/linkage/updateLinkageActive', data })

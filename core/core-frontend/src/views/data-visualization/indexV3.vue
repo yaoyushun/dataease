@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { useLatestQuery } from '@/hooks/web/useQueryScope'
-const canvasQuery = useLatestQuery('canvas-load')
 import dvRuler from '@/assets/svg/dv-ruler.svg'
 import CanvasAttr from '@/components/data-visualization/CanvasAttr.vue'
 import {
@@ -120,7 +118,6 @@ const leftSidebarRef = ref(null)
 const dvLayout = ref(null)
 const canvasCenterRef = ref(null)
 const mainHeight = ref(300)
-const templateLoadError = ref(false)
 let createType = null
 let isDragging = false // 标记是否在拖动
 let startX, startY, scrollLeft, scrollTop
@@ -339,7 +336,7 @@ const initLocalCanvasData = async callback => {
   const busiFlag = opt === 'copy' ? 'dataV-copy' : 'dataV'
   await initCanvasData(
     resourceId,
-    { busiFlag, resourceTable: 'snapshot', source: 'main-edit', queryRequest: canvasQuery.start() },
+    { busiFlag, resourceTable: 'snapshot', source: 'main-edit' },
     function () {
       state.canvasInitStatus = true
       // afterInit
@@ -469,18 +466,11 @@ onMounted(async () => {
     let deTemplateData
     let preName
     if (createType === 'template') {
-      try {
-        const templateParamsApply = JSON.parse(
-          Base64.decode(decodeURIComponent(templateParams + ''))
-        )
-        await decompressionPre(templateParamsApply, result => {
-          deTemplateData = result
-          preName = deTemplateData.baseInfo?.preName
-        })
-      } catch {
-        templateLoadError.value = true
-        return
-      }
+      const templateParamsApply = JSON.parse(Base64.decode(decodeURIComponent(templateParams + '')))
+      await decompressionPre(templateParamsApply, result => {
+        deTemplateData = result
+        preName = deTemplateData.baseInfo?.preName
+      })
     }
     dvMainStore.createInit('dataV', null, pid, watermarkBaseInfo, preName)
     nextTick(() => {
@@ -582,11 +572,9 @@ eventBus.on('tabSort', tabSort)
 </script>
 
 <template>
-  <el-empty v-if="templateLoadError" :description="t('visualization.template_load_failed')" />
   <!-- 全屏期间移出编辑器布局树，只保留全屏预览画布 -->
   <div
     v-show="!fullscreenFlag"
-    v-if="!templateLoadError"
     ref="dvLayout"
     v-loading="pageLoading"
     element-loading-background="rgba(0, 0, 0, 0)"
@@ -739,7 +727,7 @@ eventBus.on('tabSort', tabSort)
   <ThresholdDialog v-if="appStore.getXpackValid"></ThresholdDialog>
   <canvas-cache-dialog ref="canvasCacheOutRef" @doUseCache="doUseCache"></canvas-cache-dialog>
   <dv-preview
-    v-if="fullscreenFlag && !templateLoadError"
+    v-if="fullscreenFlag"
     style="z-index: 10"
     ref="dvPreviewRef"
     show-position="edit-preview"

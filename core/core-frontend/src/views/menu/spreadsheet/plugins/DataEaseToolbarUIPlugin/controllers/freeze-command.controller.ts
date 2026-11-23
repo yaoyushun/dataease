@@ -18,7 +18,7 @@ export class FreezeCommandController extends Disposable {
           const { unitId, subUnitId, worksheet } = target
           const scroll = accessor
             .get(IRenderManagerService)
-            .getRenderUnitById(unitId)
+            .getRenderById(unitId)
             ?.with(SheetScrollManagerService)
             .getCurrentScrollState()
           const viewRow = scroll?.sheetViewStartRow ?? 0

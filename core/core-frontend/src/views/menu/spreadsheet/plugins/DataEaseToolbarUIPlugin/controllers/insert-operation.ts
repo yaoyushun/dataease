@@ -45,12 +45,12 @@ export const DataEaseInsertDropdownOperation: ICommand = {
 export const DATAEASE_INSERT_DROPDOWN_ITEMS = [
   {
     key: 'pivot-table',
-    label: 'dataease-spreadsheet.menu.pivotTable',
+    label: '透视表',
     commandId: InsertPivotTableOperation.id
   },
   {
     key: 'detail-table',
-    label: 'dataease-spreadsheet.menu.detailTable',
+    label: '明细表',
     commandId: InsertDetailTableOperation.id
   },
   {
@@ -60,12 +60,12 @@ export const DATAEASE_INSERT_DROPDOWN_ITEMS = [
   },
   {
     key: 'link',
-    label: 'dataease-spreadsheet.menu.link',
+    label: '链接',
     commandId: DATAEASE_INSERT_LINK_MENU_ID
   },
   {
     key: 'note',
-    label: 'dataease-spreadsheet.menu.note',
+    label: '批注',
     commandId: DATAEASE_ADD_NOTE_MENU_ID
   }
 ]

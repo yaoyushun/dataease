@@ -21,44 +21,24 @@ import { useI18n } from '@/hooks/web/useI18n'
 import { useRequestStoreWithOut } from '@/store/modules/request'
 import { clearCache } from '@/utils/cacheUtil'
 import { securityConfig } from './hmac'
-import { getHmacFailure } from './hmacError'
-import { getHmacMessage } from './hmacMessage'
 
 type AxiosErrorWidthLoading<T> = T & {
   config: {
     loading?: boolean
     handleErrorLocally?: boolean
-    queryRequest?: QueryRequest
-    releaseCancellation?: () => void
-    loadingPath?: string
   }
 }
 
 type InternalAxiosRequestConfigWidthLoading<T> = T & {
   loading?: boolean
-  queryRequest?: QueryRequest
-  releaseCancellation?: () => void
-  loadingPath?: string
 }
 
 import { ElMessage, ElMessageBox } from 'element-plus-secondary'
 import router from '@/router'
-import { type QueryRequest } from './queryScope'
-import {
-  cancelMap,
-  cancelRequestBatch,
-  cancelAllRequest,
-  registerLegacyCancellation
-} from './legacyCancellation'
 
 const { result_code } = config
 import { useCache } from '@/hooks/web/useCache'
 const { wsCache } = useCache()
-// Discard the old /dekey response, which contained the deployment storage AES key.
-const cachedDekey = wsCache.get('DataEaseKey')
-if (cachedDekey && (typeof cachedDekey !== 'string' || !/^MI[A-Za-z0-9+/=]+$/.test(cachedDekey))) {
-  wsCache.delete('DataEaseKey')
-}
 const requestStore = useRequestStoreWithOut()
 const embeddedStore = useEmbedded()
 const basePath = import.meta.env.VITE_API_BASEPATH
@@ -69,11 +49,7 @@ export const PATH_URL = embeddedStore.baseUrl ? embeddedStore?.baseUrl + embedde
 
 export interface AxiosInstanceWithLoading extends AxiosInstance {
   <T = any, R = AxiosResponse<T>, D = any>(
-    config: AxiosRequestConfig<D> & {
-      loading?: boolean
-      handleErrorLocally?: boolean
-      queryRequest?: QueryRequest
-    }
+    config: AxiosRequestConfig<D> & { loading?: boolean; handleErrorLocally?: boolean }
   ): Promise<R>
 }
 
@@ -122,6 +98,8 @@ const mapping = {
 }
 const permissionStore = usePermissionStoreWithOut()
 const linkStore = useLinkStoreWithOut()
+const CancelToken = axios.CancelToken
+const cancelMap = {}
 let reloadingLink = false
 
 const revalidateLink = (requestConfig: InternalAxiosRequestConfig) => {
@@ -144,9 +122,6 @@ service.interceptors.request.use(
     if (config instanceof Promise) {
       config = await config
     }
-    if (embeddedStore.baseUrl) {
-      config.baseURL = PATH_URL
-    }
     await securityConfig(config, service.getUri(config))
     if (
       config.method === 'post' &&
@@ -154,6 +129,9 @@ service.interceptors.request.use(
         'application/x-www-form-urlencoded'
     ) {
       config.data = qs.stringify(config.data)
+    }
+    if (embeddedStore.baseUrl) {
+      config.baseURL = PATH_URL
     }
 
     if (isMobile()) {
@@ -188,41 +166,36 @@ service.interceptors.request.use(
       config.url = url
     }
 
-    if (config.queryRequest) {
-      if (!config.queryRequest.isCurrent()) {
-        throw new axios.CanceledError('Obsolete query', config)
-      }
-      config.signal = config.queryRequest.signal
+    if (config.url.endsWith('chartData/getData')) {
+      const chartKey = `chartData/getData/${(config.data as any).id}`
+      config.cancelToken = new CancelToken(function executor(c) {
+        cancelMap[chartKey] = c
+      })
     } else {
-      config.releaseCancellation = registerLegacyCancellation(config)
+      config.cancelToken = new CancelToken(function executor(c) {
+        cancelMap[config.url] = c
+      })
     }
 
-    config.loadingPath = permissionStore.getCurrentPath
-    config.loading && tryShowLoading(config.loadingPath)
+    config.loading && tryShowLoading(permissionStore.getCurrentPath)
     return config
   },
   (error: AxiosErrorWidthLoading<AxiosError<{ msg?: string }>>) => {
-    return Promise.reject(error)
+    error.config.loading && tryHideLoading(permissionStore.getCurrentPath)
+    Promise.reject(error)
   }
 )
 
 // response 拦截器
 service.interceptors.response.use(
   (
-    response: AxiosResponse<any> & {
-      config: InternalAxiosRequestConfigWidthLoading<InternalAxiosRequestConfig>
-    }
+    response: AxiosResponse<any> & { config: InternalAxiosRequestConfig & { loading?: boolean } }
   ) => {
-    response.config.releaseCancellation?.()
-    response.config.queryRequest?.finish()
-    response.config.loading && tryHideLoading(response.config.loadingPath)
-    if (response.config.queryRequest && !response.config.queryRequest.isCurrent()) {
-      return Promise.reject(new axios.CanceledError('Obsolete query', response.config))
-    }
     executeVersionHandler(response)
     if (response.headers['x-de-link-token']) {
       linkStore.setLinkToken(response.headers['x-de-link-token'])
     }
+    response.config.loading && tryHideLoading(permissionStore.getCurrentPath)
 
     if (response.config.responseType === 'blob') {
       // 如果是文件流，直接过
@@ -271,16 +244,7 @@ service.interceptors.response.use(
       return Promise.reject(response.data.msg)
     }
   },
-  async (error: AxiosErrorWidthLoading<AxiosError<{ msg?: string }>>) => {
-    error.config?.releaseCancellation?.()
-    error.config?.queryRequest?.finish()
-    error.config?.loading && tryHideLoading(error.config.loadingPath)
-    if (
-      axios.isCancel(error) ||
-      (error.config?.queryRequest && !error.config.queryRequest.isCurrent())
-    ) {
-      return Promise.reject(error)
-    }
+  (error: AxiosErrorWidthLoading<AxiosError<{ msg?: string }>>) => {
     // Image failures belong to the image loader, as with native <img> requests. Preserve
     // the rejection so denied/missing images cannot become successful exports or trigger a login loop.
     if (error.config?.handleErrorLocally) {
@@ -299,26 +263,13 @@ service.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const hmacFailure = getHmacFailure(error)
-    if (hmacFailure) {
-      ElMessage({
-        type: 'error',
-        message: await getHmacMessage(hmacFailure),
-        showClose: true,
-        grouping: true,
-        duration: 0
-      })
-      // A rejected signature must not become an undefined successful response or a login redirect.
-      return Promise.reject(error)
-    }
-
     if (error?.response.status === 413) {
       ElMessage({
         type: 'error',
         message: useI18n().t('common.file_size_exceed_tips'),
         showClose: true
       })
-      return Promise.reject(error)
+      return
     }
     const header = error.response?.headers as AxiosHeaders
     if (
@@ -337,6 +288,7 @@ service.interceptors.response.use(
       )
     }
 
+    error.config.loading && tryHideLoading(permissionStore.getCurrentPath)
     if (header.has('DE-GATEWAY-FLAG')) {
       if (revalidateLink(error.config)) {
         return Promise.reject(error)
@@ -366,7 +318,7 @@ service.interceptors.response.use(
         showMsg(useI18n().t('common.permission_denied_tips'), '-changed-')
       }
     }
-    if (error?.response.status >= 400) {
+    if (error?.response.status === 400) {
       return Promise.reject(error)
     }
 
@@ -409,4 +361,29 @@ const executeVersionHandler = (response: AxiosResponse) => {
   }
 }
 
+const cancelRequestBatch = cancelKey => {
+  if (cancelKey) {
+    if (cancelKey.indexOf('/**') > -1) {
+      const cancelKeyPre = cancelKey.split('/**')[0]
+      Object.keys(cancelMap).forEach(key => {
+        if (key.indexOf(cancelKeyPre) > -1) {
+          cancelMap[key]?.(() => {
+            console.warn('Operation canceled by the user,url:' + key)
+          })
+        }
+      })
+    } else {
+      cancelMap[cancelKey]?.(() => {
+        console.warn('Operation canceled by the user,url:' + cancelKey)
+      })
+    }
+  }
+}
+const cancelAllRequest = () => {
+  Object.keys(cancelMap).forEach(key => {
+    cancelMap[key]?.(() => {
+      console.warn('Operation canceled by the user,url:' + key)
+    })
+  })
+}
 export { service, cancelMap, cancelRequestBatch, cancelAllRequest }

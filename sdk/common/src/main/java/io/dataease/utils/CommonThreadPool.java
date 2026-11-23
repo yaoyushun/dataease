@@ -15,55 +15,46 @@ public class CommonThreadPool {
 
     private int maxQueueSize = 10;
 
-    private int keepAliveSeconds = 600;
+    private int maximumPoolSize = 10;
 
-    private ThreadPoolExecutor workThreadPool;
+    private int keepAliveSeconds = 600;
 
     private ScheduledThreadPoolExecutor scheduledThreadPoolExecutor;
 
     @PostConstruct
     public void init() {
-        // 有界工作池负责执行任务，避免无界队列堆积；调度池只负责定时任务和超时取消。
-        workThreadPool = new ThreadPoolExecutor(corePoolSize, corePoolSize, keepAliveSeconds, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(Math.max(1, maxQueueSize)), new ThreadPoolExecutor.AbortPolicy());
-        scheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(2);
-        scheduledThreadPoolExecutor.setRemoveOnCancelPolicy(true);
+        scheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(corePoolSize);
+        scheduledThreadPoolExecutor.setMaximumPoolSize(corePoolSize);
+        scheduledThreadPoolExecutor.setKeepAliveTime(keepAliveSeconds, TimeUnit.SECONDS);
     }
 
     @PreDestroy
     public void shutdown() {
         if (scheduledThreadPoolExecutor != null) {
-            scheduledThreadPoolExecutor.shutdownNow();
-        }
-        if (workThreadPool != null) {
-            workThreadPool.shutdownNow();
+            scheduledThreadPoolExecutor.shutdown();
         }
     }
 
     /**
-     * 线程池是否可用(工作队列未满)
+     * 线程池是否可用(实际队列数是否小于最大队列数)
      *
      * @return true为可用，false不可用
      */
     public boolean available() {
-        return workThreadPool.getQueue().size() < maxQueueSize;
+        return scheduledThreadPoolExecutor.getQueue().size() <= maxQueueSize;
     }
 
     /**
-     * 添加任务；工作队列已满时明确抛出繁忙异常，不静默丢弃。
+     * 添加任务，不强制限制队列数
      *
      * @param task 任务
      */
     public void addTask(Runnable task) {
-        try {
-            workThreadPool.execute(task);
-        } catch (RejectedExecutionException e) {
-            throw new RejectedExecutionException("CommonThreadPool is busy, queue full: " + maxQueueSize, e);
-        }
+        scheduledThreadPoolExecutor.execute(task);
     }
 
     /**
-     * 添加延迟执行任务
+     * 添加延迟执行任务，不强制限制队列数
      *
      * @param task  任务
      * @param delay 延迟时间
@@ -81,19 +72,15 @@ public class CommonThreadPool {
      * @param timeUnit 超时时间单位
      */
     public void addTask(Runnable task, long timeOut, TimeUnit timeUnit) {
-        Future<?> future;
-        try {
-            future = workThreadPool.submit(() -> {
-                try {
-                    task.run();
-                } catch (Exception exception) {
-                    LogUtil.getLogger().error("failed to execute task", exception);
-                }
-            });
-        } catch (RejectedExecutionException e) {
-            throw new RejectedExecutionException("CommonThreadPool is busy, queue full: " + maxQueueSize, e);
-        }
-        // 超时取消由独立调度池触发，不占用工作线程。
+        // 直接提交到共享调度线程池执行，避免每次新建单线程池并阻塞核心线程等待任务结束
+        Future<?> future = scheduledThreadPoolExecutor.submit(() -> {
+            try {
+                task.run();
+            } catch (Exception exception) {
+                LogUtil.getLogger().error("failed to execute task", exception);
+            }
+        });
+        // 超时后取消任务，防止长时间任务一直占用线程池
         scheduledThreadPoolExecutor.schedule(() -> {
             if (!future.isDone() && future.cancel(true)) {
                 LogUtil.getLogger().error("timeout to execute task");

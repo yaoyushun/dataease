@@ -161,7 +161,7 @@ const customStyle = computed(() => {
   result["--ed-color-primary-light-5"] = mixColor(
     "ffffff",
     result["--ed-color-primary"].substring(1),
-    40
+    0.4
   );
   return result;
 });

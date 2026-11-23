@@ -462,8 +462,6 @@ const defaultReplication = computed(() => {
             v-if="form.type === 'presto'"
           >
             <CustomPassword
-              :reveal-resource-id="form.id"
-              reveal-secret-type="SYNC_PASSWORD"
               :placeholder="
                 t('common.inputText' )+ ' ' + t('sync_datasource.keytab_Key_path')
               "
@@ -493,8 +491,6 @@ const defaultReplication = computed(() => {
             v-if="form.type !== 'presto'"
           >
             <CustomPassword
-              :reveal-resource-id="form.id"
-              reveal-secret-type="SYNC_PASSWORD"
               :placeholder="t('common.inputText') + ' ' + t('sync_datasource.password')"
               show-password
               type="password"
@@ -686,8 +682,6 @@ const defaultReplication = computed(() => {
             v-if="form.type !== 'presto'"
           >
             <CustomPassword
-              :reveal-resource-id="form.id"
-              reveal-secret-type="SYNC_PASSWORD"
               :placeholder="t('common.inputText') + ' ' + t('sync_datasource.password')"
               show-password
               type="password"

@@ -228,7 +228,7 @@ const initOpenHandler = newWindow => {
       </el-dropdown>
     </div>
   </div>
-  <OpenHandler v-if="appStore.getXpackValid" ref="openHandler" />
+  <OpenHandler v-if="appStore.getXpackValid || appStore.getBluewingEnabled" ref="openHandler" />
 </template>
 
 <style lang="less">

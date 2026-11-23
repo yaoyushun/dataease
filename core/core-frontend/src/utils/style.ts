@@ -331,7 +331,6 @@ export function dataVTabComponentAdd(innerComponent, parentComponent) {
   innerComponent.style.left = 0
   const parentStyleAdaptor = { ...parentComponent.style }
   // 去掉tab头部高度
-  const offset = parentStyleAdaptor.showTabTitle ? 46 : 0
-  parentStyleAdaptor.height = parentStyleAdaptor.height - offset
+  parentStyleAdaptor.height = parentStyleAdaptor.height - (parentComponent.showTabTitle ? 46 : 0)
   groupStyleRevert(innerComponent, parentStyleAdaptor)
 }

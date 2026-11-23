@@ -17,7 +17,6 @@ import ExcelDs from '@/assets/svg/Excel-ds.svg'
 import ExcelRemoteDs from '@/assets/svg/Excel-remote-ds.svg'
 import dorisDs from '@/assets/svg/doris-ds.svg'
 import esDs from '@/assets/svg/es-ds.svg'
-import h2Ds from '@/assets/svg/icon_h2_outlined.svg'
 const iconDatasourceMap = {
   mysql: mysqlDs,
   oracle: oracleDs,
@@ -37,8 +36,7 @@ const iconDatasourceMap = {
   Excel: ExcelDs,
   ExcelRemote: ExcelRemoteDs,
   doris: dorisDs,
-  es: esDs,
-  h2: h2Ds
+  es: esDs
 }
 
 export { iconDatasourceMap }

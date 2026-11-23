@@ -2,7 +2,6 @@ package io.dataease.visualization.server;
 import io.dataease.utils.LogUtil;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import io.dataease.api.dataset.union.DatasetGroupInfoDTO;
@@ -96,6 +95,8 @@ public class DataVisualizationServer implements DataVisualizationApi {
     private EntityManager entityManager;
     @Resource
     private CoreChartViewRepository coreChartViewRepository;
+    @Resource
+    private SnapshotCoreChartViewRepository snapshotCoreChartViewRepository;
     @Resource
     private DataVisualizationInfoRepository dataVisualizationInfoRepository;
 
@@ -705,8 +706,6 @@ public class DataVisualizationServer implements DataVisualizationApi {
         coreVisualizationManage.innerEdit(visualizationInfo);
         if (CommonConstants.DV_STATUS.PUBLISHED == request.getStatus()) {
             coreVisualizationManage.removeDvCore(dvId);
-            // 先执行删除再清理托管状态，保证同 ID 图表从镜像重新插入且发布失败时整体回滚
-            entityManager.flush();
             entityManager.clear();
             coreVisualizationManage.dvRestore(dvId);
             chartViewManege.publishThreshold(dvId, request.getActiveViewIds());
@@ -851,20 +850,12 @@ public class DataVisualizationServer implements DataVisualizationApi {
         // 复制图表 chart_view
         chartViewManege.viewCopyWithDv(sourceDvId, newDvId, copyId, CommonConstants.RESOURCE_TABLE.CORE);
         chartViewManege.viewCopyWithDv(sourceDvId, newDvId, copyId, CommonConstants.RESOURCE_TABLE.SNAPSHOT);
-        QCoreChartView coreChartView = QCoreChartView.coreChartView;
-        // 替换画布中的图表引用只需复制前后的 ID，避免重复加载完整配置。
-        List<Tuple> viewList = queryFactory
-                .select(coreChartView.id, coreChartView.copyFrom)
-                .from(coreChartView)
-                .where(coreChartView.copyId.eq(copyId))
-                .fetch();
+        List<CoreChartView> viewList = coreChartViewRepository.findViewInfoByCopyId(copyId);
         if (!CollectionUtils.isEmpty(viewList)) {
             String componentData = newDv.getComponentData();
             // componentData viewId 数据  并保存
-            for (Tuple viewInfo : viewList) {
-                Long sourceViewId = viewInfo.get(coreChartView.copyFrom);
-                Long targetViewId = viewInfo.get(coreChartView.id);
-                componentData = componentData.replace(String.valueOf(sourceViewId), String.valueOf(targetViewId));
+            for (CoreChartView viewInfo : viewList) {
+                componentData = componentData.replace(String.valueOf(viewInfo.getCopyFrom()), String.valueOf(viewInfo.getId()));
             }
             newDv.setComponentData(componentData);
         }
@@ -1215,13 +1206,7 @@ public class DataVisualizationServer implements DataVisualizationApi {
 
         if (DataVisualizationConstants.RESOURCE_OPT_TYPE.MOVE.equals(request.getOpt()) || DataVisualizationConstants.RESOURCE_OPT_TYPE.RENAME.equals(request.getOpt()) || DataVisualizationConstants.RESOURCE_OPT_TYPE.EDIT.equals(request.getOpt()) || DataVisualizationConstants.RESOURCE_OPT_TYPE.COPY.equals(request.getOpt())) {
             if (request.getPid() == null) {
-                if (request.getId() == null) {
-                    DEException.throwException(ResultCode.PARAM_NOT_COMPLETE.code(), ResultCode.PARAM_NOT_COMPLETE.message());
-                }
                 DataVisualizationInfo result = dataVisualizationInfoRepository.findById(request.getId()).orElse(null);
-                if (result == null) {
-                    DEException.throwException(Translator.get("i18n_resource_not_exists"));
-                }
                 request.setPid(result.getPid());
             }
         }
@@ -1287,29 +1272,20 @@ public class DataVisualizationServer implements DataVisualizationApi {
     public List<Long> getEnabledViewIds(Long dvId, String resourceTable) {
         List<Long> result = new ArrayList<>();
         DataVisualizationVO dvInfo = coreVisualizationManage.findDvInfo(dvId, null, resourceTable);
-        // 画布过滤只使用图表 ID，正式表和快照表都无需加载完整实体。
-        List<Long> viewIds;
+        List<CoreChartView> views;
         if (resourceTable.equalsIgnoreCase("core")) {
-            QCoreChartView coreChartView = QCoreChartView.coreChartView;
-            viewIds = queryFactory
-                    .select(coreChartView.id)
-                    .from(coreChartView)
-                    .where(coreChartView.sceneId.eq(dvId))
-                    .fetch();
+            views = coreChartViewRepository.findBySceneId(dvId);
         } else {
-            QSnapshotCoreChartView snapshotCoreChartView = QSnapshotCoreChartView.snapshotCoreChartView;
-            viewIds = queryFactory
-                    .select(snapshotCoreChartView.id)
-                    .from(snapshotCoreChartView)
-                    .where(snapshotCoreChartView.sceneId.eq(dvId))
-                    .fetch();
+            views = snapshotCoreChartViewRepository.findBySceneId(dvId).stream().map(ele -> {
+                CoreChartView coreChartView = new CoreChartView();
+                BeanUtils.copyBean(coreChartView, ele);
+                return coreChartView;
+            }).collect(Collectors.toList());
         }
 
-        if (CollectionUtils.isNotEmpty(viewIds) && dvInfo != null) {
+        if (CollectionUtils.isNotEmpty(views) && dvInfo != null) {
             String componentData = dvInfo.getComponentData();
-            result = viewIds.stream()
-                    .filter(viewId -> componentData.indexOf("\"id\":\"" + viewId) > 0)
-                    .collect(Collectors.toList());
+            result = views.stream().filter(item -> componentData.indexOf("\"id\":\"" + item.getId()) > 0).map(CoreChartView::getId).collect(Collectors.toList());
 
         }
         return result;
@@ -1341,10 +1317,5 @@ public class DataVisualizationServer implements DataVisualizationApi {
     @Override
     public List<DatasetPermissionTemplate> queruDatasetPermissionTemplate(Long resourceId) {
         return resourcePermissionManage.queruDatasetPermissionTemplate(resourceId);
-    }
-
-    @Override
-    public List<DatasetPermissionTemplate> queryDatasetPermissionTemplates(List<Long> datasetIds) {
-        return resourcePermissionManage.queryDatasetPermissionTemplates(datasetIds);
     }
 }

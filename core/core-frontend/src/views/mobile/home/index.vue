@@ -196,7 +196,11 @@ const formatterTime = val => {
           :time="formatterTime(ele.lastEditTime || ele.time)"
         />
       </template>
-      <TabPaneTable v-else-if="appStore.getXpackValid && activeTab === 'data-filling'" />
+      <TabPaneTable
+        v-else-if="
+          (appStore.getXpackValid || appStore.getBluewingEnabled) && activeTab === 'data-filling'
+        "
+      />
     </div>
     <div class="empty-img-mobile" v-if="!!emptyTips">
       <img width="125" height="125" :src="nothingNone" alt="" />
@@ -206,7 +210,10 @@ const formatterTime = val => {
     </div>
   </div>
 
-  <TabPane v-if="appStore.getXpackValid" @loaded="loadedDataFilling" />
+  <TabPane
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+    @loaded="loadedDataFilling"
+  />
 </template>
 
 <style lang="less" scoped>

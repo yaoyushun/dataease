@@ -4,8 +4,7 @@ export interface Language {
 }
 
 export interface LocaleDropdownType {
-  lang: string
-  custom?: boolean
+  lang: LocaleType
   name?: string
   elLocale?: Language
 }

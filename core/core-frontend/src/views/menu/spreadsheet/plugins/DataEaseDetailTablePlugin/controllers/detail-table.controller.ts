@@ -21,6 +21,7 @@ import {
 } from '@univerjs/ui'
 import {
   INTERCEPTOR_POINT,
+  RemoveSheetCommand,
   SetWorksheetActiveOperation,
   SheetInterceptorService
 } from '@univerjs/sheets'
@@ -35,8 +36,10 @@ import {
   InsertDetailTableOperation,
   OpenDetailTableCreateDialogOperation
 } from '../commands/insert-operations'
-import { registerTableSheetHistory } from '../../../services/table-sheet-history'
-import { DetailTableDisplayStateService } from '../services/detail-table-display-state.service'
+import {
+  SetDetailTableInstancesMutation,
+  type ISetDetailTableInstancesMutationParams
+} from '../commands/instance-mutations'
 import type { DetailTableConfig } from '../types'
 import { TableFillService } from '../services/table-fill.service'
 import { DETAIL_TABLE_PLUGIN_RESOURCE_NAME } from '../../../utils/plugin-resource'
@@ -47,7 +50,7 @@ import { isPluginEditorCellSelection } from '../../../utils/plugin-editor-select
 import type { PluginActionToolbarPayload } from '../../../types/editor'
 import DetailTableCreateDialog from '../components/DetailTableCreateDialog.vue'
 import { InsertDetailTableMenuFactory } from './menu'
-import { DATAEASE_INSERT_DROPDOWN_MENU_ID } from '../../DataEaseToolbarUIPlugin/config/ribbon-config'
+import { DATAEASE_INSERT_DROPDOWN_ID } from '../../DataEaseInsertPlugin/controllers/menu'
 import { DetailTableInstanceService } from '../services/detail-table-instance.service'
 import { DetailTableInsertionService } from '../services/detail-table-insertion.service'
 import { DetailTableRenderStyleService } from '../services/detail-table-render-style.service'
@@ -135,7 +138,8 @@ export class DataEaseDetailTableController extends Disposable {
       InsertDetailTableOperation,
       ApplyDetailTableOperation,
       ApplyDetailTableStyleOperation,
-      ClearDetailTableOperation
+      ClearDetailTableOperation,
+      SetDetailTableInstancesMutation
     ]
 
     commands.forEach(command => {
@@ -170,22 +174,87 @@ export class DataEaseDetailTableController extends Disposable {
 
   private _initSheetDeleteLifecycle(): void {
     this.disposeWithMe(
-      registerTableSheetHistory(
-        this._injector,
-        'dataease.mutation.set-sheet-detail-table-instances',
-        this._detailTableInstanceService,
-        this._injector.get(DetailTableDisplayStateService),
-        this._detailTableRenderStyleService,
-        config =>
-          this._tableFillService.fillTable(this._univerApi, config, { initialRestore: true })
-      )
+      this._sheetInterceptorService.interceptCommand({
+        getMutations: commandInfo => {
+          if (commandInfo.id !== RemoveSheetCommand.id) {
+            return { redos: [], undos: [] }
+          }
+
+          const { unitId, subUnitId } = commandInfo.params || {}
+          const workbook = unitId
+            ? this._univerInstanceService.getUnit(unitId, UniverInstanceType.UNIVER_SHEET)
+            : this._univerInstanceService.getCurrentUnitOfType(UniverInstanceType.UNIVER_SHEET)
+          const targetUnitId = unitId || workbook?.getUnitId()
+          if (!targetUnitId || !subUnitId) {
+            return { redos: [], undos: [] }
+          }
+
+          const previousInstances = [...this._detailTableInstanceService.get(targetUnitId)]
+          const draftIds = new Set(
+            previousInstances
+              .filter(plugin => {
+                const status = this._pluginRenderStatusService.get(plugin.id)
+                return plugin.placement.sheetId === subUnitId && status?.status === 'draft'
+              })
+              .map(plugin => plugin.id)
+          )
+          const nextInstances = previousInstances.filter(
+            plugin => plugin.placement.sheetId !== subUnitId
+          )
+          if (nextInstances.length === previousInstances.length) {
+            return { redos: [], undos: [] }
+          }
+
+          const restoredInstances = previousInstances.filter(plugin => !draftIds.has(plugin.id))
+
+          // 已完成实例跟随 Sheet 进入撤销栈；未完成草稿删除后不再恢复。
+          return {
+            // 删除草稿状态必须早于原生 Sheet mutation，避免 Sheet 切换先触发关闭确认。
+            preRedos: [
+              {
+                id: SetDetailTableInstancesMutation.id,
+                params: {
+                  unitId: targetUnitId,
+                  instances: nextInstances,
+                  discardedDraftIds: [...draftIds]
+                }
+              }
+            ],
+            redos: [],
+            undos: [
+              {
+                id: SetDetailTableInstancesMutation.id,
+                params: { unitId: targetUnitId, instances: restoredInstances }
+              }
+            ]
+          }
+        }
+      })
+    )
+
+    this.disposeWithMe(
+      this._commandService.onCommandExecuted(commandInfo => {
+        if (commandInfo.id !== SetDetailTableInstancesMutation.id) {
+          return
+        }
+
+        const params = commandInfo.params as ISetDetailTableInstancesMutationParams | undefined
+        if (!params?.discardedDraftIds?.length) {
+          return
+        }
+
+        this._dialogService.close('RangeSelectDialog')
+        this._dialogService.close('DetailTableCreateDialog')
+        this._detailTableInsertionService.cancel()
+        emitter.emit(SPREADSHEET_EVENTS.CLOSE_PLUGIN_EDITOR)
+      })
     )
   }
 
   private _initMenus(): void {
     this._menuManagerService.mergeMenu({
       [RibbonStartGroup.OTHERS]: {
-        [DATAEASE_INSERT_DROPDOWN_MENU_ID]: {
+        [DATAEASE_INSERT_DROPDOWN_ID]: {
           [InsertDetailTableOperation.id]: {
             order: 10,
             menuItemFactory: InsertDetailTableMenuFactory

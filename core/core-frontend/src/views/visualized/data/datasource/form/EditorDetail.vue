@@ -192,9 +192,6 @@ const initForm = (type, pluginDsList, indexPlugin, isPluginDs) => {
   if (type === 'oracle') {
     form.value.configuration.connectionType = 'sid'
   }
-  if (type === 'h2') {
-    form.value.configuration.urlType = 'jdbcUrl'
-  }
   form.value.type = type
 
   time = setTimeout(() => {
@@ -1149,7 +1146,7 @@ defineExpose({
           <el-form-item
             :label="t('data_source.connection_method')"
             prop="type"
-            v-if="form.type !== 'es' && form.type !== 'h2'"
+            v-if="form.type !== 'es'"
           >
             <el-radio-group v-model="form.configuration.urlType">
               <el-radio value="hostName">{{ t('data_source.hostname') }}</el-radio>
@@ -1242,8 +1239,6 @@ defineExpose({
             v-if="form.type === 'presto'"
           >
             <CustomPassword
-              :reveal-resource-id="form.id"
-              reveal-secret-type="DATASOURCE_PASSWORD"
               :placeholder="t('common.inputText') + ' ' + t('datasource.keytab_Key_path')"
               show-password
               type="password"
@@ -1273,8 +1268,6 @@ defineExpose({
           </el-form-item>
           <el-form-item :label="t('datasource.password')" v-if="form.type !== 'presto'">
             <CustomPassword
-              :reveal-resource-id="form.id"
-              reveal-secret-type="DATASOURCE_PASSWORD"
               :placeholder="t('common.inputText') + ' ' + t('datasource.password')"
               show-password
               type="password"
@@ -1473,8 +1466,6 @@ defineExpose({
               prop="configuration.sshPassword"
             >
               <CustomPassword
-                :reveal-resource-id="form.id"
-                reveal-secret-type="DATASOURCE_SSH_PASSWORD"
                 :placeholder="t('common.inputText') + ' ' + t('datasource.password')"
                 show-password
                 type="password"
@@ -1501,8 +1492,6 @@ defineExpose({
               v-if="form.configuration.sshType === 'sshkey'"
             >
               <CustomPassword
-                :reveal-resource-id="form.id"
-                reveal-secret-type="DATASOURCE_SSH_KEY_PASSWORD"
                 :placeholder="t('common.inputText') + ' ' + t('datasource.password')"
                 show-password
                 type="password"

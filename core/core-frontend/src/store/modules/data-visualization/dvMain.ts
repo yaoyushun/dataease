@@ -1149,15 +1149,12 @@ export const dvMainStore = defineStore('dataVisualization', {
       this.nowPanelOuterParamsBaseInfoV2[dvId] = outerParamsInfo.outerParamsInfoBaseMap
     },
     // 添加联动 下钻 等查询组件
-    addViewTrackFilter(data, sourceData?) {
+    addViewTrackFilter(data) {
       const viewId = data.viewId
       let trackInfo
       if (data.option === 'linkage') {
         // 维度日期类型转换
-        viewFieldTimeTrans(
-          sourceData === undefined ? this.canvasViewDataInfo[viewId] : sourceData,
-          data
-        )
+        viewFieldTimeTrans(this.canvasViewDataInfo[viewId], data)
         trackInfo = this.nowPanelTrackInfo
       } else {
         trackInfo = this.nowPanelJumpInfoTargetPanel

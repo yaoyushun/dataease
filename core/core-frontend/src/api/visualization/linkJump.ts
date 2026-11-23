@@ -1,4 +1,3 @@
-import type { QueryRequest } from '@/config/axios/queryScope'
 import request from '@/config/axios'
 
 export function getTableFieldWithViewId(viewId) {
@@ -27,14 +26,9 @@ export function queryTargetVisualizationJumpInfo(requestInfo) {
   })
 }
 
-export function queryVisualizationJumpInfo(
-  dvId,
-  resourceTable = 'snapshot',
-  queryRequest?: QueryRequest
-) {
+export function queryVisualizationJumpInfo(dvId, resourceTable = 'snapshot') {
   return request.get({
     url: '/linkJump/queryVisualizationJumpInfo/' + dvId + '/' + resourceTable,
-    queryRequest,
     loading: false
   })
 }

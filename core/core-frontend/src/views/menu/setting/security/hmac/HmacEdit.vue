@@ -4,7 +4,6 @@ import { ElMessage, ElLoading } from 'element-plus-secondary'
 import { useI18n } from '@/hooks/web/useI18n'
 import type { FormInstance, FormRules } from 'element-plus-secondary'
 import request from '@/config/axios'
-import { invalidateHmac } from '@/views/tools/HmacTool'
 import icon_refresh_outlined from '@/assets/svg/icon_refresh_outlined.svg'
 import dvInfo from '@/assets/svg/dv-info.svg'
 const { t } = useI18n()
@@ -79,7 +78,7 @@ const submitForm = async (formEl: FormInstance | undefined) => {
         .then(res => {
           if (!res.msg) {
             ElMessage.success(t('common.save_success'))
-            invalidateHmac()
+            window['de_secret_key'] = null
             emits('saved')
             reset()
           }

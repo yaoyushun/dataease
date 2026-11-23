@@ -17,7 +17,6 @@ import io.dataease.auth.DeApiPath;
 import io.dataease.constant.AuthResourceEnum;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.ObjectUtils;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,7 +33,6 @@ import java.util.Map;
 @RequestMapping("/share")
 @DeApiPath(value = "/share", rt = AuthResourceEnum.PANEL)
 @RestController
-@Profile("!desktop")
 public class XpackShareServer implements XpackShareApi {
 
     @Resource(name = "xpackShareManage")

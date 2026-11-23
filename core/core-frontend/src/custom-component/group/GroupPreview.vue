@@ -63,13 +63,13 @@ const customGroupStyle = item => {
   }
 }
 
-const userViewEnlargeOpen = (opt, item, runtime?) => {
+const userViewEnlargeOpen = (opt, item) => {
   userViewEnlargeRef.value.dialogInit(
     dvMainStore.canvasStyleData,
     canvasViewInfo.value[item.id],
     item,
     opt,
-    { runtime, scale: scale.value }
+    { scale: scale.value }
   )
 }
 
@@ -95,7 +95,7 @@ const onPointClick = param => {
         :search-count="searchCount"
         :scale="scale"
         :font-family="fontFamily"
-        @userViewEnlargeOpen="(opt, runtime) => userViewEnlargeOpen(opt, item, runtime)"
+        @userViewEnlargeOpen="userViewEnlargeOpen($event, item)"
         @onPointClick="onPointClick"
       />
     </div>

@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { provideQueryScope, useLatestQuery } from '@/hooks/web/useQueryScope'
-const refreshQuery = useLatestQuery('canvas-refresh')
-import { registerCanvasRuntime } from '@/hooks/web/useChartRuntimeCache'
 import { isChartRefreshPreview, useChartRefreshTimer } from '@/hooks/web/useChartRefreshTimer'
 import { getCanvasStyle, getShapeItemStyle } from '@/utils/style'
 import ComponentWrapper from './ComponentWrapper.vue'
@@ -135,7 +132,6 @@ const {
   showPopBar,
   fontFamily
 } = toRefs(props)
-provideQueryScope(!isMainCanvas(canvasId.value))
 const domId = 'preview-' + canvasId.value
 const scaleWidthPoint = ref(100)
 const scaleHeightPoint = ref(100)
@@ -144,15 +140,6 @@ const previewCanvas = ref(null)
 const previewCanvasInner = ref(null)
 const cellWidth = ref(10)
 const cellHeight = ref(10)
-const canvasRuntimeId = registerCanvasRuntime(
-  () => ({
-    componentData: props.componentData,
-    canvasStyleData: props.canvasStyleData,
-    canvasViewInfo: props.canvasViewInfo as Record<string, Chart>,
-    dvInfo: props.dvInfo as { id: string; type: string }
-  }),
-  !isMainCanvas(canvasId.value)
-)
 const userViewEnlargeRef = ref(null)
 const searchCount = ref(0)
 const renderReady = ref(false)
@@ -442,10 +429,7 @@ useChartRefreshTimer(
 const refreshDataV = () => {
   searchCount.value++
   if (isMainCanvas(canvasId.value)) {
-    refreshOtherComponent(dvInfo.value.id, dvInfo.value.type, {
-      componentData: componentData.value,
-      queryRequest: refreshQuery.start()
-    })
+    refreshOtherComponent(dvInfo.value.id, dvInfo.value.type)
   }
 }
 
@@ -505,13 +489,13 @@ onBeforeUnmount(() => {
   }
 })
 
-const userViewEnlargeOpen = (opt, item, runtime?) => {
+const userViewEnlargeOpen = (opt, item) => {
   userViewEnlargeRef.value?.dialogInit(
     canvasStyleData.value,
     canvasViewInfo.value[item.id],
     item,
     opt,
-    { scale: scaleMin.value / 100, runtime }
+    { scale: scaleMin.value / 100 }
   )
 }
 const handleMouseDown = () => {
@@ -601,7 +585,6 @@ defineExpose({
   <div
     :id="domId"
     class="canvas-container"
-    :data-canvas-runtime="canvasRuntimeId"
     :style="canvasStyle"
     :class="{
       'de-download-custom': downloadStatus,
@@ -654,7 +637,7 @@ defineExpose({
           :is-selector="props.isSelector"
           :font-family="canvasStyleData.fontFamily || fontFamily"
           :scroll-main="state.scrollMain"
-          @userViewEnlargeOpen="(opt, runtime) => userViewEnlargeOpen(opt, item, runtime)"
+          @userViewEnlargeOpen="userViewEnlargeOpen($event, item)"
           @datasetParamsInit="datasetParamsInit(item)"
           @onPointClick="onPointClick"
           :index="index"
@@ -671,7 +654,10 @@ defineExpose({
     <empty-background v-if="!state.initState" description="参数不能为空" img-type="noneWhite" />
     <de-fullscreen ref="fullScreeRef"></de-fullscreen>
     <dataset-params-component ref="customDatasetParamsRef"></dataset-params-component>
-    <OpenHandler v-if="appStore.getXpackValid" ref="openHandler"></OpenHandler>
+    <OpenHandler
+      v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+      ref="openHandler"
+    ></OpenHandler>
     <link-opt-bar
       v-if="linkOptBarShow"
       ref="link-opt-bar"

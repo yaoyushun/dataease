@@ -1,11 +1,8 @@
 <script lang="ts" setup>
-import { useQueryScope } from '@/hooks/web/useQueryScope'
-const queryScope = useQueryScope()
-const canvasRuntime = useCanvasRuntime()
-import { provideChartRuntimeCache, useCanvasRuntime } from '@/hooks/web/useChartRuntimeCache'
 import icon_info_outlined from '@/assets/svg/icon_info_outlined.svg'
 import icon_linkRecord_outlined from '@/assets/svg/icon_link-record_outlined.svg'
 import icon_viewinchat_outlined from '@/assets/svg/icon_viewinchat_outlined.svg'
+import { cancelRequestBatch } from '@/config/axios/service'
 import icon_drilling_outlined from '@/assets/svg/icon_drilling_outlined.svg'
 import { useI18n } from '@/hooks/web/useI18n'
 import { isChartRefreshPreview, useChartRefreshTimer } from '@/hooks/web/useChartRefreshTimer'
@@ -40,9 +37,6 @@ import {
 import DrillPath from '@/views/chart/components/views/components/DrillPath.vue'
 import { ElIcon, ElInput, ElMessage } from 'element-plus-secondary'
 import { useFilter } from '@/hooks/web/useFilter'
-import { DynamicTimeError } from '@/custom-component/v-query/dynamic-default-time'
-import { FixedTimeError } from '@/custom-component/v-query/fixed-time-value'
-import { useChartViewportLoad } from '@/hooks/web/useChartViewportLoad'
 import { useCache } from '@/hooks/web/useCache'
 
 import { dvMainStoreWithOut } from '@/store/modules/data-visualization/dvMain'
@@ -52,7 +46,7 @@ import { ChartLibraryType } from '@/views/chart/components/js/panel/types'
 import chartViewManager from '@/views/chart/components/js/panel'
 import { storeToRefs } from 'pinia'
 import { normalizeExternalLinkUrl, setIdValueTrans } from '@/utils/canvasUtils'
-import { isMobile, sanitizeHtml } from '@/utils/utils'
+import { sanitizeHtml } from '@/utils/utils'
 import { Base64 } from 'js-base64'
 import DeRichTextView from '@/custom-component/rich-text/DeRichTextView.vue'
 import DePictureGroup from '@/custom-component/picture-group/Component.vue'
@@ -281,7 +275,97 @@ const titleContentStyle = computed<CSSProperties>(() => ({
   lineHeight: titleContentHeight.value
 }))
 
-const safeTitleRemark = computed(() => sanitizeHtml(state.title_remark.remark || ''))
+const safeTitleRemark = computed(() => {
+  const remark = state.title_remark.remark || ''
+  let activeTimeStr = ''
+  const otherConds: Array<{ name: string; val: string }> = []
+  const cid = String(view.value?.id || '')
+  const ctitle = String(view.value?.title || '')
+
+  try {
+    const vq = dvMainStore.componentData?.find(c => c.innerType === 'VQuery')
+    if (vq && Array.isArray(vq.propValue)) {
+      for (const item of vq.propValue) {
+        if (item.displayType === '7' || item.displayType === 7) {
+          if (Array.isArray(item.selectValue) && item.selectValue.length >= 2) {
+            const v0 = item.selectValue[0]
+            const v1 = item.selectValue[1]
+            if (v0 && v1) {
+              const s0 =
+                typeof v0 === 'number'
+                  ? new Date(v0).toLocaleDateString('zh-CN').replace(/\//g, '.')
+                  : String(v0).slice(0, 10).replace(/-/g, '.')
+              const s1 =
+                typeof v1 === 'number'
+                  ? new Date(v1).toLocaleDateString('zh-CN').replace(/\//g, '.')
+                  : String(v1).slice(0, 10).replace(/-/g, '.')
+              activeTimeStr = `${s0} 至 ${s1}`
+            }
+          }
+        } else {
+          const cName = item.name || (item.field && item.field.name) || ''
+          if (!cName || cName === '时间范围') continue
+          if (Array.isArray(item.checkedFields) && item.checkedFields.length > 0 && cid) {
+            const match = item.checkedFields.some((cf: any) => String(cf).includes(cid))
+            if (!match) continue
+          }
+          let valStr = ''
+          const sv = item.selectValue
+          if (Array.isArray(sv)) {
+            const vals = sv
+              .map((v: any) => (v && typeof v === 'object' ? v.label || v.value || '' : String(v || '')))
+              .filter(Boolean)
+            if (vals.length > 0) valStr = vals.join('、')
+          } else if (sv !== null && sv !== undefined && sv !== '') {
+            valStr = String(sv).trim()
+          }
+          if (valStr && valStr !== '不限') {
+            otherConds.push({ name: cName, val: valStr })
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  if (!activeTimeStr) {
+    activeTimeStr = '2026.11.01 至 2026.11.30'
+  }
+
+  const csql =
+    view.value?.customStyle?.text?.sql ||
+    (window.__CHART_SQL_MAP__ && window.__CHART_SQL_MAP__[cid]) ||
+    ''
+  if (!window.__CHART_SQL_MAP__) window.__CHART_SQL_MAP__ = {}
+  if (csql) window.__CHART_SQL_MAP__[cid] = csql
+  if (!window.__CHART_TITLE_MAP__) window.__CHART_TITLE_MAP__ = {}
+  if (ctitle) window.__CHART_TITLE_MAP__[cid] = ctitle
+
+  let contentHtml = `<div class="bw-data-scope-popover" style="min-width: 170px; max-width: 280px; padding: 2px 0; color: #1f2937; line-height: 1.5; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">`
+  contentHtml += `<div style="font-weight: 700; margin-bottom: 6px; font-size: 14px; color: #111827; padding-bottom: 6px; border-bottom: 1px solid #f0f0f0;">数据范围</div>`
+  contentHtml += `<div style="margin-bottom: 4px;"><div style="color: #6b7280; font-size: 12px; margin-bottom: 2px;">时间范围：</div><div style="font-weight: 500; font-size: 13px; color: #111827;">${activeTimeStr}</div></div>`
+
+  if (otherConds.length > 0) {
+    contentHtml += `<div style="border-top: 1px solid #f0f0f0; padding-top: 6px; margin-top: 6px;">`
+    contentHtml += `<div style="color: #6b7280; font-size: 12px; margin-bottom: 4px;">筛选条件：</div>`
+    contentHtml += `<div style="display: flex; flex-direction: column; gap: 6px;">`
+    for (const c of otherConds) {
+      contentHtml += `<div style="display: flex; align-items: flex-start; gap: 6px; line-height: 20px;">`
+      contentHtml += `<span style="background: #e5eaff; color: #334383; font-weight: 700; font-size: 12px; border-radius: 4px; padding: 0 6px; flex-shrink: 0; max-width: 82px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${c.name}">${c.name}</span>`
+      contentHtml += `<span style="font-size: 13px; color: #111827; font-weight: 400; word-break: break-all;">${c.val}</span>`
+      contentHtml += `</div>`
+    }
+    contentHtml += `</div></div>`
+  }
+
+  if (remark && !remark.includes('时间范围：') && !remark.includes('数据范围')) {
+    contentHtml += `<div style="border-top: 1px dashed #f0f0f0; padding-top: 4px; margin-top: 6px; color: #6b7280; font-size: 12px;">${remark}</div>`
+  }
+  contentHtml += `<div style="border-top: 1px solid #f0f0f0; padding-top: 8px; margin-top: 8px;"><span class="de-view-sql-btn" data-chart-id="${cid}" style="color: #1677ff; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-block;">查看 SQL</span></div>`
+  contentHtml += `</div>`
+  return sanitizeHtml(contentHtml)
+})
 
 const trackMenu = computed<Array<string>>(() => {
   return chartComponent?.value?.trackMenu ?? []
@@ -298,23 +382,6 @@ const hasDrillIcon = computed(() => {
 })
 
 const loading = ref(false)
-const chartRuntime = provideChartRuntimeCache(
-  () => view.value as Chart,
-  () => showPosition.value
-)
-const instanceSuffixId = computed(() => `${suffixId.value}-${chartRuntime.id}`)
-const chartAreaRef = ref<HTMLElement | null>(null)
-const viewportLoadEnabled = () =>
-  !isMobile() &&
-  !dvMainStore.inMobile &&
-  !dvMainStore.mobileInPc &&
-  !view.value.isPlugin &&
-  !view.value.plugin?.isPlugin &&
-  dvInfo.value.type === 'dashboard' &&
-  ['preview', 'edit-preview', 'multiplexing'].includes(showPosition.value)
-const viewportLoad = useChartViewportLoad(chartAreaRef, viewportLoadEnabled, loading, () =>
-  queryData.flush()
-)
 const isAutoRefreshing = ref(false)
 
 const resultMode = computed(() => {
@@ -359,11 +426,11 @@ watch([() => searchCount.value], () => {
 })
 // 仪表板的查询结果设置变化 图表数据需要刷新
 watch([() => resultCount.value], () => {
-  queryDataFromSelect()
+  queryData()
 })
 
 watch([() => resultMode.value], () => {
-  queryDataFromSelect()
+  queryData()
 })
 
 watch([() => scale.value], () => {
@@ -435,9 +502,7 @@ const initTitle = () => {
 
 const drillJump = (index: number) => {
   state.drillClickDimensionList.splice(index)
-  const queryFilter = filter()
-  if (!queryFilter) return
-  view.value.chartExtRequest = queryFilter
+  view.value.chartExtRequest = filter()
   calcData(view.value)
 }
 
@@ -470,9 +535,7 @@ const chartClick = param => {
       dimensionList: param.data.dimensionList,
       extra: param.extra
     })
-    const queryFilter = filter()
-    if (!queryFilter) return
-    view.value.chartExtRequest = queryFilter
+    view.value.chartExtRequest = filter()
     calcData(view.value)
   } else if (props.view.drillFields.length > 0) {
     ElMessage.error(t('chart.last_layer'))
@@ -481,14 +544,7 @@ const chartClick = param => {
 
 // 仪表板和大屏所有额外过滤参数都在此处
 const filter = (firstLoad?: boolean) => {
-  let filter: ReturnType<typeof useFilter>['filter']
-  try {
-    filter = useFilter(view.value.id, firstLoad, showPosition.value, canvasRuntime?.()).filter
-  } catch (error) {
-    if (!(error instanceof FixedTimeError)) throw error
-    ElMessage.error({ message: t(error.key), grouping: true })
-    return
-  }
+  const { filter } = useFilter(view.value.id, firstLoad, showPosition.value)
   const result = {
     user: wsCache.get('user.uid'),
     filter,
@@ -571,7 +627,7 @@ const jumpClick = param => {
   }
   if (jumpInfo) {
     // 维度日期类型转换
-    viewFieldTimeTrans(chartRuntime.data, param)
+    viewFieldTimeTrans(dvMainStore.getViewDataDetails(param.viewId), param)
     param.sourceDvId = dvInfo.value.id
     param.sourceViewId = param.viewId
     param.sourceFieldId = dimension.id
@@ -592,7 +648,7 @@ const jumpClick = param => {
           ? '&editPreview=true'
           : ''
         const filterOuterParams = {}
-        const curFilter = chartRuntime.request
+        const curFilter = dvMainStore.getLastViewRequestInfo(param.viewId)
         const targetViewInfoList = jumpInfo.targetViewInfoList
         if (
           curFilter &&
@@ -686,13 +742,8 @@ const jumpClick = param => {
   }
 }
 
-let chartQueryVersion = 0
-const invalidateChartQuery = () => {
-  chartQueryVersion++
-  if (!view.value.isPlugin) chartComponent.value?.invalidateQuery?.()
-}
 const queryDataFromSelect = (firstLoad = false) => {
-  invalidateChartQuery()
+  cancelRequestBatch(`chartData/getData/${view.value.id}`)
   loading.value = false
   queryData(firstLoad)
 }
@@ -710,29 +761,14 @@ const queryData = debounce((firstLoad = false, autoRefresh = false) => {
   ) {
     return
   }
-  const searched = queryScope
-    ? queryScope.loadedCharts.has(element.value.id)
-    : dvMainStore.firstLoadMap.includes(element.value.id)
-  let queryFilter
-  try {
-    queryFilter = filter(searched ? false : firstLoad)
-  } catch (error) {
-    if (!(error instanceof DynamicTimeError)) throw error
-    ElMessage.error({ message: t(error.key), grouping: true })
-    return
-  }
-  if (!queryFilter) return
+  const searched = dvMainStore.firstLoadMap.includes(element.value.id)
+  let queryFilter = filter(searched ? false : firstLoad)
   if (showPosition.value.includes('viewDialog') || autoRefresh) {
-    queryFilter = chartRuntime.request
+    queryFilter = dvMainStore.getLastViewRequestInfo(view.value.id)
   }
   let params = cloneDeep(view.value)
   params['chartExtRequest'] = queryFilter
   chartExtRequest.value = queryFilter
-  if (view.value.isPlugin && !loadPlugin.value) {
-    view.value.chartExtRequest = queryFilter
-    loadPlugin.value = true
-    return
-  }
   calcData(params, autoRefresh)
 }, 300)
 
@@ -741,32 +777,28 @@ const queryData = debounce((firstLoad = false, autoRefresh = false) => {
  * 插件沿用原调用参数，原生图表额外接收刷新来源
  */
 const calcData = (params, autoRefresh = false) => {
-  invalidateChartQuery()
-  const version = chartQueryVersion
-  chartRuntime.request = cloneDeep(params.chartExtRequest)
-  if (chartRuntime.publishToStore)
-    dvMainStore.setLastViewRequestInfo(params.id, params.chartExtRequest)
-  const request = cloneDeep(params)
-  viewportLoad.run(() => {
-    if (version === chartQueryVersion) performCalcData(request, autoRefresh)
-  })
-}
-
-const performCalcData = (params, autoRefresh = false) => {
-  const version = chartQueryVersion
-  const complete = () => {
-    if (version === chartQueryVersion) loading.value = false
-  }
+  dvMainStore.setLastViewRequestInfo(params.id, params.chartExtRequest)
   if (chartComponent?.value) {
     isAutoRefreshing.value = autoRefresh
     loading.value = true
     if (view.value.isPlugin) {
       chartComponent?.value?.invokeMethod({
         methodName: 'calcData',
-        args: [params, complete]
+        args: [
+          params,
+          res => {
+            loading.value = false
+          }
+        ]
       })
     } else {
-      chartComponent?.value?.calcData?.(params, complete, autoRefresh)
+      chartComponent?.value?.calcData?.(
+        params,
+        () => {
+          loading.value = false
+        },
+        autoRefresh
+      )
     }
   }
 }
@@ -785,15 +817,7 @@ onBeforeMount(() => {
     nextTick(() => {
       useEmitt({
         name: `query-data-${view.value.id}`,
-        callback: (payload?: { scopeId?: number } | boolean) => {
-          if (
-            typeof payload === 'object' &&
-            payload?.scopeId !== undefined &&
-            payload.scopeId !== queryScope?.scopeId
-          )
-            return
-          queryDataFromSelect(typeof payload === 'boolean' ? payload : false)
-        }
+        callback: queryDataFromSelect
       })
     })
   }
@@ -891,18 +915,7 @@ const changeDataset = () => {
   checkFieldIsAllowEmpty()
 }
 
-watch(
-  () => view.value.id,
-  () => {
-    invalidateChartQuery()
-    queryData.cancel()
-    loading.value = false
-  }
-)
-onBeforeUnmount(() => {
-  invalidateChartQuery()
-  queryData.cancel()
-})
+onBeforeUnmount(() => queryData.cancel())
 
 const loadPlugin = ref(false)
 
@@ -911,22 +924,11 @@ onMounted(() => {
     state.drillClickDimensionList = view.value?.chartExtRequest?.drill ?? []
     queryData(!showPosition.value.includes('viewDialog'))
   } else {
-    const searched = queryScope
-      ? queryScope.loadedCharts.has(element.value.id)
-      : dvMainStore.firstLoadMap.includes(element.value.id)
-    let queryFilter
-    try {
-      queryFilter = filter(!searched)
-    } catch (error) {
-      if (!(error instanceof DynamicTimeError)) throw error
-      ElMessage.error({ message: t(error.key), grouping: true })
-      return
-    }
-    if (queryFilter) {
-      view.value['chartExtRequest'] = queryFilter
-      chartExtRequest.value = queryFilter
-      loadPlugin.value = true
-    }
+    const searched = dvMainStore.firstLoadMap.includes(element.value.id)
+    const queryFilter = filter(!searched)
+    view.value['chartExtRequest'] = queryFilter
+    chartExtRequest.value = queryFilter
+    loadPlugin.value = true
   }
   if (!listenerEnable.value) {
     return
@@ -958,9 +960,7 @@ onMounted(() => {
           cacheViewInfo.snapshotCacheViewCalc.includes(view.value.id) ||
           cacheViewInfo.snapshotCacheViewCalc.includes('all')
         ) {
-          const queryFilter = filter(false)
-          if (!queryFilter) return
-          view.value.chartExtRequest = queryFilter
+          view.value.chartExtRequest = filter(false)
           calcData(view.value)
         } else if (
           cacheViewInfo.snapshotCacheViewRender.includes(view.value.id) ||
@@ -980,9 +980,7 @@ onMounted(() => {
       }
       initTitle()
       nextTick(() => {
-        const queryFilter = filter(false)
-        if (!queryFilter) return
-        view.value.chartExtRequest = queryFilter
+        view.value.chartExtRequest = filter(false)
         const targetVal = val || view.value
         calcData(targetVal)
       })
@@ -997,9 +995,7 @@ onMounted(() => {
       }
       initTitle()
       nextTick(() => {
-        const queryFilter = filter(false)
-        if (!queryFilter) return
-        view.value.chartExtRequest = queryFilter
+        view.value.chartExtRequest = filter(false)
         calcData(view.value)
       })
     }
@@ -1021,7 +1017,7 @@ onMounted(() => {
   const notifyRenderChartAllItem = (eventName: string, payload: RenderChartAllPayload) => {
     emitter.emit(eventName, {
       ...payload,
-      viewId: `${showPosition.value}-${view.value.id}-${instanceSuffixId.value}`
+      viewId: `${showPosition.value}-${view.value.id}-${suffixId.value}`
     })
   }
 
@@ -1099,7 +1095,7 @@ onMounted(() => {
     callback: () => {
       const chart = cloneDeep(view.value)
       chart.container =
-        'container-' + showPosition.value + '-' + view.value.id + '-' + instanceSuffixId.value
+        'container-' + showPosition.value + '-' + view.value.id + '-' + suffixId.value
     }
   })
 
@@ -1334,8 +1330,6 @@ const clearG2Tooltip = () => {
 
 <template>
   <div
-    ref="chartAreaRef"
-    :data-chart-runtime="chartRuntime.id"
     class="chart-area report-load"
     :class="{ 'report-load-finish': !loadingFlag }"
     v-loading="loadingFlag"
@@ -1379,7 +1373,14 @@ const clearG2Tooltip = () => {
             :class="{ 'is-editing': titleEditStatus }"
             :style="titleIconStyle"
           >
-            <el-tooltip :effect="toolTip" placement="top" v-if="state.title_remark.show">
+            <el-tooltip
+              effect="light"
+              placement="top"
+              trigger="hover"
+              :hide-after="600"
+              :enterable="true"
+              v-if="state.title_remark.show"
+            >
               <template #content>
                 <div
                   :style="{
@@ -1391,7 +1392,7 @@ const clearG2Tooltip = () => {
                   v-dompurify-html="safeTitleRemark"
                 ></div>
               </template>
-              <el-icon :size="iconSize" class="inner-icon">
+              <el-icon :size="iconSize" class="inner-icon" style="cursor: pointer">
                 <Icon name="icon_info_outlined"><icon_info_outlined class="svg-icon" /></Icon>
               </el-icon>
             </el-tooltip>
@@ -1431,13 +1432,7 @@ const clearG2Tooltip = () => {
       </div>
     </div>
     <!--这里去渲染不同图库的图表-->
-    <div
-      v-if="
-        (!viewportLoadEnabled() || viewportLoad.activated.value) &&
-        (allEmptyCheck || (chartAreaShow && !showEmpty))
-      "
-      style="flex: 1; overflow: hidden"
-    >
+    <div v-if="allEmptyCheck || (chartAreaShow && !showEmpty)" style="flex: 1; overflow: hidden">
       <plugin-component
         v-if="view.plugin?.isPlugin && loadPlugin"
         :jsname="view.plugin.staticMap['index']"
@@ -1469,7 +1464,6 @@ const clearG2Tooltip = () => {
       >
       </de-picture-group>
       <de-rich-text-view
-        :view="view"
         v-else-if="showChartView(ChartLibraryType.RICH_TEXT)"
         :scale="scale"
         :themes="canvasStyleData.dashboard.themeColor"
@@ -1588,6 +1582,11 @@ const clearG2Tooltip = () => {
     gap: 8px;
     max-width: 100%;
     min-width: 0;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+    cursor: text !important;
 
     &.is-editing {
       width: 100%;
@@ -1596,7 +1595,7 @@ const clearG2Tooltip = () => {
 
   .icons-container-out {
     position: relative;
-    display: none;
+    display: inline-flex !important;
     align-items: center;
     flex: 0 0 auto;
     max-width: 100%;
@@ -1643,5 +1642,10 @@ const clearG2Tooltip = () => {
   white-space: nowrap !important;
   overflow: hidden;
   text-overflow: ellipsis;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  cursor: text !important;
 }
 </style>

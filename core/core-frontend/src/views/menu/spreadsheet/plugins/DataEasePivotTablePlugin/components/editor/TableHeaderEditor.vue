@@ -13,7 +13,6 @@
             <div class="background-color-control">
               <el-color-picker
                 is-custom
-                effect="light"
                 :model-value="headerStyle.backgroundColor"
                 :disabled="!headerStyle.enable"
                 @change="value => updateHeaderStyle('backgroundColor', value || '')"
@@ -35,7 +34,6 @@
             <div class="text-toolbar-row">
               <el-color-picker
                 is-custom
-                effect="light"
                 :model-value="headerStyle.textColor"
                 :disabled="!headerStyle.enable"
                 @change="value => updateHeaderStyle('textColor', value)"

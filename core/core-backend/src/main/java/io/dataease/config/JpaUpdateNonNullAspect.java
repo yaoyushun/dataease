@@ -60,13 +60,17 @@ public class JpaUpdateNonNullAspect {
      */
     @SuppressWarnings("unchecked")
     private Object mergeEntityIfExists(Object entity, JpaRepository<?, ?> repository) {
-        Object id = getEntityId(entity);
-        if (id == null) return entity; // 新增，直接返回
-        Optional<?> dbOpt = ((JpaRepository<Object, Object>) repository).findById(id);
-        if (dbOpt.isPresent()) {
-            Object dbEntity = dbOpt.get();
-            copyNonNullProperties(entity, dbEntity);
-            return dbEntity;
+        try {
+            Object id = getEntityId(entity);
+            if (id == null) return entity; // 新增，直接返回
+            Optional<?> dbOpt = ((JpaRepository<Object, Object>) repository).findById(id);
+            if (dbOpt.isPresent()) {
+                Object dbEntity = dbOpt.get();
+                copyNonNullProperties(entity, dbEntity);
+                return dbEntity;
+            }
+        } catch (Exception e) {
+            LogUtil.error("合并实体属性失败", e);
         }
         return entity;
     }

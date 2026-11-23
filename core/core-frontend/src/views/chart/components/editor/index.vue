@@ -236,7 +236,6 @@ onBeforeMount(() => {
 
 onBeforeUnmount(() => {
   cacheId = ''
-  fieldsRequestId++
 })
 
 onMounted(() => {
@@ -297,13 +296,9 @@ const filedList = computed(() => {
 
 provide('filedList', () => filedList.value)
 provide('quota', () => state.quota)
-const quotaFieldsReady = ref(false)
-let fieldsRequestId = 0
 watch(
-  [() => view.value['tableId'], () => view.value.id],
+  [() => view.value['tableId']],
   () => {
-    fieldsRequestId++
-    quotaFieldsReady.value = false
     nextTick(() => {
       if ('picture-group' === props.view.type) {
         return
@@ -318,28 +313,19 @@ watch(
   { deep: true, immediate: true }
 )
 const getFields = (id, chartId, type) => {
-  const requestId = ++fieldsRequestId
-  quotaFieldsReady.value = false
   if (id && chartId) {
     fieldLoading.value = true
     getFieldByDQ(id, chartId, { type: type })
       .then(res => {
-        if (requestId !== fieldsRequestId) {
-          return
-        }
         state.dimension = (res.dimensionList as unknown as Field[]) || []
         state.quota = (res.quotaList as unknown as Field[]) || []
         state.dimensionData = JSON.parse(JSON.stringify(state.dimension))
         state.quotaData = JSON.parse(JSON.stringify(state.quota))
 
-        quotaFieldsReady.value = true
         fieldLoading.value = false
         emitter.emit('dataset-change')
       })
       .catch(() => {
-        if (requestId !== fieldsRequestId) {
-          return
-        }
         state.dimension = []
         state.quota = []
         state.dimensionData = []
@@ -2202,7 +2188,6 @@ const chartStyleScroll = (val: any) => {
               :themes="themes"
               :dimension-data="state.dimension"
               :quota-data="state.quota"
-              :quota-fields-ready="quotaFieldsReady"
               :all-fields="allFields"
               @onColorChange="onColorChange"
               @onMiscChange="onMiscChange"
@@ -3593,7 +3578,6 @@ const chartStyleScroll = (val: any) => {
                           :themes="themes"
                           :dimension-data="state.dimension"
                           :quota-data="state.quota"
-                          :quota-fields-ready="quotaFieldsReady"
                           :all-fields="allFields"
                           @onColorChange="onColorChange"
                           @onMiscChange="onMiscChange"

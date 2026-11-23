@@ -1,5 +1,6 @@
 import request from '@/config/axios'
 
+
 export const reportGridApi = (current: number, size: number, data) => {
   return request.post({ url: `/report/pager/${current}/${size}`, data })
 }
@@ -75,6 +76,3 @@ export const dingtalkGroupOptionApi = () => {
   const url = '/dingtalk/getGroup'
   return request.get({ url })
 }
-
-export const reportDeliveryApi = data => request.post({ url: '/report/delivery', data })
-export const reportResendApi = data => request.post({ url: '/report/resend', data })

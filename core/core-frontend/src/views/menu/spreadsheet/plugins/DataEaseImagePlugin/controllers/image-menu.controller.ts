@@ -1,5 +1,6 @@
-import { Disposable, ICommandService } from '@univerjs/core'
-import { IMenuManagerService, RibbonInsertGroup } from '@univerjs/ui'
+import { Disposable, ICommandService, Inject } from '@univerjs/core'
+import { ComponentManager, IMenuManagerService, RibbonInsertGroup } from '@univerjs/ui'
+import { AddImageIcon } from '@univerjs/icons'
 import {
   InsertCellImageOperation,
   InsertFloatingImageOperation,
@@ -16,11 +17,17 @@ import {
 export class DataEaseImageMenuController extends Disposable {
   constructor(
     @ICommandService private readonly commandService: ICommandService,
-    @IMenuManagerService private readonly menuManagerService: IMenuManagerService
+    @IMenuManagerService private readonly menuManagerService: IMenuManagerService,
+    @Inject(ComponentManager) private readonly componentManager: ComponentManager
   ) {
     super()
+    this.initComponents()
     this.initCommands()
     this.initMenus()
+  }
+
+  private initComponents(): void {
+    this.disposeWithMe(this.componentManager.register('AddImageIcon', AddImageIcon))
   }
 
   private initCommands(): void {

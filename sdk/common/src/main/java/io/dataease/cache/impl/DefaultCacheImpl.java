@@ -11,10 +11,9 @@ import org.springframework.stereotype.Component;
 
 import javax.cache.Cache;
 import javax.cache.CacheManager;
-import javax.cache.configuration.CompleteConfiguration;
-import javax.cache.configuration.Configuration;
 import javax.cache.configuration.MutableConfiguration;
 import javax.cache.expiry.Duration;
+import javax.cache.expiry.ModifiedExpiryPolicy;
 import java.util.concurrent.TimeUnit;
 
 @ConditionalOnExpression("'${spring.cache.type}'.equals('jcache')")
@@ -41,16 +40,7 @@ public class DefaultCacheImpl implements DECacheService {
 
         }
         if (ObjectUtils.isNotEmpty(cache)) {
-            // XML/native caches keep their configured expiry and value types.
-            DynamicCacheExpiryPolicy.Factory factory = dynamicExpiryFactory(cache);
-            if (factory == null) {
-                cache.put(key, value);
-            } else {
-                Duration duration = expTime > 0
-                        ? new Duration(unit == null ? TimeUnit.SECONDS : unit, expTime)
-                        : factory.getDefaultDuration();
-                DynamicCacheExpiryPolicy.put(cache, key, value, duration);
-            }
+            cache.put(key, value);
         }
 
     }
@@ -84,23 +74,26 @@ public class DefaultCacheImpl implements DECacheService {
         return cache.containsKey(key);
     }
 
-    private MutableConfiguration<String, Object> configuration(Long expTime, TimeUnit unit) {
-        Duration duration = expTime <= 0 ? Duration.ONE_MINUTE
-                : new Duration(unit == null ? TimeUnit.SECONDS : unit, expTime);
-        return new MutableConfiguration<String, Object>()
-                .setTypes(String.class, Object.class)
-                .setStoreByValue(false)
-                .setExpiryPolicyFactory(new DynamicCacheExpiryPolicy.Factory(duration));
+    private MutableConfiguration<String, Object> defaultConfiguration() {
+        MutableConfiguration<String, Object> configuration =
+                new MutableConfiguration<String, Object>()
+                        .setTypes(String.class, Object.class)
+                        .setStoreByValue(false)
+                        .setExpiryPolicyFactory(ModifiedExpiryPolicy.factoryOf(Duration.ONE_MINUTE));
+        return configuration;
     }
 
-    private DynamicCacheExpiryPolicy.Factory dynamicExpiryFactory(Cache<String, Object> cache) {
-        // Native/XML caches need not expose CompleteConfiguration.
-        Object configuration = cache.getConfiguration(Configuration.class);
-        if (configuration instanceof CompleteConfiguration<?, ?> completeConfiguration) {
-            Object factory = completeConfiguration.getExpiryPolicyFactory();
-            return factory instanceof DynamicCacheExpiryPolicy.Factory dynamicFactory ? dynamicFactory : null;
+    private MutableConfiguration<String, Object> configuration(Long expTime, TimeUnit unit) {
+        if (expTime <= 0) return defaultConfiguration();
+        if (ObjectUtils.isEmpty(unit)) {
+            unit = TimeUnit.SECONDS;
         }
-        return null;
+        MutableConfiguration<String, Object> configuration =
+                new MutableConfiguration<String, Object>()
+                        .setTypes(String.class, Object.class)
+                        .setStoreByValue(false)
+                        .setExpiryPolicyFactory(ModifiedExpiryPolicy.factoryOf(new Duration(unit, expTime)));
+        return configuration;
     }
 
     @Override

@@ -6,8 +6,8 @@ export function InsertDetailTableMenuFactory(): IMenuButtonItem<string> {
   return {
     id: InsertDetailTableOperation.id,
     type: MenuItemType.BUTTON,
-    title: 'dataease-spreadsheet.menu.detailTable',
+    title: '明细表',
     icon: 'TableIcon',
-    tooltip: 'dataease-spreadsheet.menu.insertDetailTable'
+    tooltip: '插入明细表'
   }
 }

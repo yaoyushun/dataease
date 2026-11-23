@@ -62,7 +62,6 @@ import io.dataease.model.ResourceDeleteRequest;
 import io.dataease.permission.util.V3UserUtil;
 import io.dataease.qrtz.dao.auto.repo.entity.QrtzSchedulerState;
 import io.dataease.result.PageResult;
-import io.dataease.result.ResultCode;
 import io.dataease.system.dao.auto.entity.CoreSysSetting;
 import io.dataease.system.manage.CoreUserManage;
 import io.dataease.utils.*;
@@ -161,9 +160,6 @@ public class DatasourceServer implements DatasourceApi {
     }
 
     public boolean checkRepeat(@RequestBody BusiDsRequest dataSourceDTO) {
-        if (dataSourceDTO == null || StringUtils.isBlank(dataSourceDTO.getType())) {
-            throw new DEException(ResultCode.PARAM_NOT_COMPLETE.code(), ResultCode.PARAM_NOT_COMPLETE.message());
-        }
         if (Arrays.asList("folder", "es").contains(dataSourceDTO.getType()) || dataSourceDTO.getType().contains("API") || dataSourceDTO.getType().contains("Excel")) {
             return false;
         }
@@ -181,8 +177,7 @@ public class DatasourceServer implements DatasourceApi {
         if (CollectionUtils.isEmpty(datasources)) {
             return false;
         }
-        dataSourceDTO.setConfiguration(restoreConfiguration(dataSourceDTO.getConfiguration(),
-                credentialSourceId(dataSourceDTO), dataSourceDTO.getType()));
+        dataSourceDTO.setConfiguration(new String(Base64.getDecoder().decode(dataSourceDTO.getConfiguration())));
         DatasourceConfiguration configuration = JsonUtil.parseObject(dataSourceDTO.getConfiguration(), DatasourceConfiguration.class);
         boolean hasRepeat = false;
         for (CoreDatasource datasource : datasources) {
@@ -307,8 +302,7 @@ public class DatasourceServer implements DatasourceApi {
             return update(busiDsRequest);
         }
         if (StringUtils.isNotEmpty(dataSourceDTO.getConfiguration())) {
-            dataSourceDTO.setConfiguration(restoreConfiguration(dataSourceDTO.getConfiguration(),
-                    credentialSourceId(busiDsRequest), busiDsRequest.getType()));
+            dataSourceDTO.setConfiguration(new String(Base64.getDecoder().decode(dataSourceDTO.getConfiguration())));
         }
         validateExcelFiles(dataSourceDTO, null);
         preCheckDs(dataSourceDTO);
@@ -438,8 +432,7 @@ public class DatasourceServer implements DatasourceApi {
             return save(busiDsRequest);
         }
         DatasourceDTO sourceData = dataSourceManage.getDs(pk);
-        dataSourceDTO.setConfiguration(restoreConfiguration(dataSourceDTO.getConfiguration(),
-                credentialSourceId(busiDsRequest), busiDsRequest.getType()));
+        dataSourceDTO.setConfiguration(new String(Base64.getDecoder().decode(dataSourceDTO.getConfiguration())));
         dataSourceDTO.setPid(sourceData.getPid());
         validateExcelFiles(dataSourceDTO, sourceData);
         preCheckDs(dataSourceDTO);
@@ -523,7 +516,25 @@ public class DatasourceServer implements DatasourceApi {
             dataSourceManage.innerEdit(requestDatasource);
         } else if (dataSourceDTO.getType().equals(DatasourceConfiguration.DatasourceType.Excel.name())) {
             requestDatasource.setEnableDataFill(null);
+            List<String> sourceTables = ExcelUtils.getTables(sourceTableRequest).stream().map(DatasetTableDTO::getTableName).collect(Collectors.toList());
+            List<String> tables = ExcelUtils.getTables(datasourceRequest).stream().map(DatasetTableDTO::getTableName).collect(Collectors.toList());
             if (Objects.equals(dataSourceDTO.getEditType(), replace)) {
+                toCreateTables = tables;
+                toDeleteTables = sourceTables.stream().filter(s -> tables.contains(s)).collect(Collectors.toList());
+                for (String deleteTable : toDeleteTables) {
+                    try {
+                        datasourceSyncManage.dropEngineTable(deleteTable);
+                    } catch (Exception ignore) {
+                    }
+                }
+                for (String toCreateTable : toCreateTables) {
+                    datasourceRequest.setTable(toCreateTable);
+                    try {
+                        datasourceSyncManage.createEngineTable(toCreateTable, ExcelUtils.getTableFields(datasourceRequest));
+                    } catch (Exception e) {
+                        DEException.throwException("Failed to create table " + toCreateTable + ", " + e.getMessage());
+                    }
+                }
                 datasourceSyncManage.extractExcelData(requestDatasource, "all_scope");
                 dataSourceManage.checkName(dataSourceDTO);
                 ExcelUtils.mergeSheets(requestDatasource, sourceData);
@@ -557,19 +568,14 @@ public class DatasourceServer implements DatasourceApi {
 
     @Override
     public List<DatasourceConfiguration.DatasourceType> datasourceTypes() {
-        List<DatasourceConfiguration.DatasourceType> types = new ArrayList<>(Arrays.asList(DatasourceConfiguration.DatasourceType.values()));
-        if (!LocalModelUtils.isDesktop()) {
-            types.remove(DatasourceConfiguration.DatasourceType.h2);
-        }
-        return types;
+        return Arrays.asList(DatasourceConfiguration.DatasourceType.values());
     }
 
     @Override
     public DatasourceDTO validate(BusiDsRequest busiDsRequest) throws DEException {
         DatasourceDTO dataSourceDTO = new DatasourceDTO();
         BeanUtils.copyBean(dataSourceDTO, busiDsRequest);
-        dataSourceDTO.setConfiguration(restoreConfiguration(dataSourceDTO.getConfiguration(),
-                credentialSourceId(busiDsRequest), busiDsRequest.getType()));
+        dataSourceDTO.setConfiguration(new String(Base64.getDecoder().decode(dataSourceDTO.getConfiguration())));
         preCheckDs(dataSourceDTO);
         CoreDatasource coreDatasource = new CoreDatasource();
         BeanUtils.copyBean(coreDatasource, dataSourceDTO);
@@ -584,8 +590,7 @@ public class DatasourceServer implements DatasourceApi {
     public List<String> getSchema(BusiDsRequest busiDsRequest) throws DEException {
         DatasourceDTO dataSourceDTO = new DatasourceDTO();
         BeanUtils.copyBean(dataSourceDTO, busiDsRequest);
-        dataSourceDTO.setConfiguration(restoreConfiguration(dataSourceDTO.getConfiguration(),
-                credentialSourceId(busiDsRequest), busiDsRequest.getType()));
+        dataSourceDTO.setConfiguration(new String(Base64.getDecoder().decode(dataSourceDTO.getConfiguration())));
         preCheckDs(dataSourceDTO);
         CoreDatasource coreDatasource = new CoreDatasource();
         BeanUtils.copyBean(coreDatasource, dataSourceDTO);
@@ -1034,12 +1039,6 @@ public class DatasourceServer implements DatasourceApi {
     public ExcelFileData loadRemoteFile(RemoteExcelRequest remoteExcelRequest) throws DEException, IOException {
         remoteExcelRequest.setUserName(new String(Base64.getDecoder().decode(remoteExcelRequest.getUserName())));
         remoteExcelRequest.setPasswd(new String(Base64.getDecoder().decode(remoteExcelRequest.getPasswd())));
-        String restored = restorePlainConfiguration(JsonUtil.toJSONString(remoteExcelRequest).toString(),
-                remoteExcelRequest.getDatasourceId() != null && remoteExcelRequest.getDatasourceId() > 0
-                        ? remoteExcelRequest.getDatasourceId() : remoteExcelRequest.getCopySourceId(), "ExcelRemote");
-        RemoteExcelRequest resolved = JsonUtil.parseObject(restored, RemoteExcelRequest.class);
-        remoteExcelRequest.setPasswd(resolved.getPasswd());
-        remoteExcelRequest.setUrl(resolved.getUrl());
         ExcelFileData excelFileData = new ExcelUtils().parseRemoteExcel(remoteExcelRequest);
         CoreDatasource coreDatasource = null;
         if (ObjectUtils.isNotEmpty(remoteExcelRequest.getDatasourceId()) && 0L != remoteExcelRequest.getDatasourceId()) {
@@ -1152,29 +1151,11 @@ public class DatasourceServer implements DatasourceApi {
 
     public ApiDefinition checkApiDatasource(Map<String, String> request) throws DEException {
         ApiDefinition apiDefinition = JsonUtil.parseObject(new String(java.util.Base64.getDecoder().decode(request.get("data"))), ApiDefinition.class);
-        String sourceId = request.get("datasourceId");
-        List<ApiDefinition> originals = List.of();
-        if (sourceId != null && !sourceId.isBlank() && !"0".equals(sourceId)) {
-            Long id = Long.valueOf(sourceId);
-            if (V3UserUtil.getLink() != null || !corePermissionManage.checkAuth(
-                    new BusiPerCheckDTO(id, BusiResourceEnum.DATASOURCE, AuthEnum.MANAGE))) {
-                throw new DEException(ResultCode.PERMISSION_NO_ACCESS.code(), ResultCode.PERMISSION_NO_ACCESS.message());
-            }
-            DatasourceDTO stored = dataSourceManage.getDs(id);
-            if (stored == null || !Objects.equals(stored.getType(), request.get("dsType"))) {
-                throw new DEException(ResultCode.PARAM_IS_INVALID.code(), Translator.get("i18n_configuration_type_mismatch"));
-            }
-            originals = JsonUtil.parseList(stored.getConfiguration(), listTypeReference);
-        }
-        apiDefinition = restoreApiDefinition(apiDefinition, originals);
         apiDefinition.setType("table");
         if (request.keySet().contains("type") && request.get("type").equals("apiStructure")) {
             apiDefinition.setShowApiStructure(true);
         }
         List<ApiDefinition> paramsList = JsonUtil.parseList(new String(java.util.Base64.getDecoder().decode(request.get("paramsList"))), listTypeReference);
-        List<ApiDefinition> restoredParams = new ArrayList<>();
-        for (ApiDefinition item : paramsList) restoredParams.add(restoreApiDefinition(item, originals));
-        paramsList = restoredParams;
         paramsList.add(apiDefinition);
         DatasourceRequest datasourceRequest = new DatasourceRequest();
         DatasourceDTO datasource = new DatasourceDTO();
@@ -1182,16 +1163,11 @@ public class DatasourceServer implements DatasourceApi {
         datasourceRequest.setDatasource(datasource);
 
         apiDefinition = (ApiDefinition) invokeMethod(request.get("dsType"), "checkApiDefinition", DatasourceRequest.class, datasourceRequest);
+        if (apiDefinition.getRequest().getAuthManager() != null && StringUtils.isNotBlank(apiDefinition.getRequest().getAuthManager().getUsername()) && StringUtils.isNotBlank(apiDefinition.getRequest().getAuthManager().getPassword()) && apiDefinition.getRequest().getAuthManager().getVerification().equals("Basic Auth")) {
+            apiDefinition.getRequest().getAuthManager().setUsername(new String(Base64.getEncoder().encode(apiDefinition.getRequest().getAuthManager().getUsername().getBytes())));
+            apiDefinition.getRequest().getAuthManager().setPassword(new String(Base64.getEncoder().encode(apiDefinition.getRequest().getAuthManager().getPassword().getBytes())));
+        }
         return apiDefinition;
-    }
-
-    private ApiDefinition restoreApiDefinition(ApiDefinition requested, List<ApiDefinition> originals) {
-        List<ApiDefinition> matches = originals.stream().filter(item ->
-                Objects.equals(item.getSerialNumber(), requested.getSerialNumber())
-                        && Objects.equals(item.getName(), requested.getName())).toList();
-        String stored = matches.size() == 1 ? JsonUtil.toJSONString(matches.getFirst()).toString() : null;
-        return JsonUtil.parseObject(ConfigurationCredentials.restore(
-                JsonUtil.toJSONString(requested).toString(), stored), ApiDefinition.class);
     }
 
     private Map<String, Object> buildAccessTokenResult(String json) {
@@ -1215,49 +1191,6 @@ public class DatasourceServer implements DatasourceApi {
     @Resource
     private CorePermissionManage corePermissionManage;
 
-    /** Use the same representation for form output and credential-preservation checks. */
-    private String configurationForEdit(String type, String configuration) {
-        Configuration editable = switch (type) {
-            case "mysql" -> JsonUtil.parseObject(configuration, Mysql.class);
-            case "h2" -> JsonUtil.parseObject(configuration, H2.class);
-            case "oracle" -> JsonUtil.parseObject(configuration, Oracle.class);
-            case "sqlServer" -> JsonUtil.parseObject(configuration, Sqlserver.class);
-            default -> null;
-        };
-        if (editable == null) return configuration;
-        if (StringUtils.isBlank(editable.getUrlType())) {
-            editable.setUrlType("h2".equals(type) ? "jdbcUrl" : "hostName");
-        }
-        if (StringUtils.isBlank(editable.getSshType())) editable.setSshType("password");
-        return JsonUtil.toJSONString(editable).toString();
-    }
-
-    private Long credentialSourceId(BusiDsRequest request) {
-        return request.getId() != null && request.getId() > 0 ? request.getId() : request.getCopySourceId();
-    }
-
-    private String restoreConfiguration(String encoded, Long id, String type) {
-        String requested = new String(Base64.getDecoder().decode(encoded), java.nio.charset.StandardCharsets.UTF_8);
-        return restorePlainConfiguration(requested, id, type);
-    }
-
-    private String restorePlainConfiguration(String requested, Long id, String type) {
-        DatasourceDTO stored = null;
-        if (id != null && id > 0) {
-            if (V3UserUtil.getLink() != null || !corePermissionManage.checkAuth(
-                    new BusiPerCheckDTO(id, BusiResourceEnum.DATASOURCE, AuthEnum.MANAGE))) {
-                throw new DEException(ResultCode.PERMISSION_NO_ACCESS.code(),
-                        ResultCode.PERMISSION_NO_ACCESS.message());
-            }
-            stored = dataSourceManage.getDs(id);
-            if (stored == null || !Objects.equals(stored.getType(), type)) {
-                throw new DEException(ResultCode.PARAM_IS_INVALID.code(), Translator.get("i18n_configuration_type_mismatch"));
-            }
-        }
-        return ConfigurationCredentials.restore(requested, stored == null ? null
-                : configurationForEdit(type, stored.getConfiguration()));
-    }
-
     private void validateExcelFiles(DatasourceDTO requested, DatasourceDTO stored) {
         if (!"Excel".equalsIgnoreCase(requested.getType())) return;
         if (V3UserUtil.getUid() == null || V3UserUtil.getLink() != null) {
@@ -1279,6 +1212,7 @@ public class DatasourceServer implements DatasourceApi {
 
     private void preCheckDs(DatasourceDTO datasource) throws DEException {
         List<String> list = datasourceTypes().stream().map(DatasourceConfiguration.DatasourceType::getType).collect(Collectors.toList());
+        list.remove(DatasourceConfiguration.DatasourceType.h2.getType());
         if (LicenseUtil.licenseValid()) {
             List<XpackPluginsDatasourceVO> xpackPluginsDatasourceVOS = pluginManage.queryPluginDs();
             xpackPluginsDatasourceVOS.forEach(ele -> list.add(ele.getType()));
@@ -1623,10 +1557,10 @@ public class DatasourceServer implements DatasourceApi {
                 }
             }
             if (CollectionUtils.isNotEmpty(params)) {
-                datasourceDTO.setParamsStr(JsonUtil.toJSONString(params).toString());
+                datasourceDTO.setParamsStr(RsaUtils.symmetricEncrypt(JsonUtil.toJSONString(params).toString()));
             }
             if (CollectionUtils.isNotEmpty(apiDefinitionListWithStatus)) {
-                datasourceDTO.setApiConfigurationStr(JsonUtil.toJSONString(apiDefinitionListWithStatus).toString());
+                datasourceDTO.setApiConfigurationStr(RsaUtils.symmetricEncrypt(JsonUtil.toJSONString(apiDefinitionListWithStatus).toString()));
             }
             if (success == apiDefinitionList.size()) {
                 datasourceDTO.setStatus("Success");
@@ -1642,7 +1576,20 @@ public class DatasourceServer implements DatasourceApi {
                 Provider provider = ProviderFactory.getProvider(datasourceDTO.getType());
                 provider.hidePW(datasourceDTO);
             } else {
-                datasourceDTO.setConfiguration(configurationForEdit(datasourceDTO.getType(), datasourceDTO.getConfiguration()));
+                switch (datasourceDTO.getType()) {
+                    case "mysql":
+                        datasourceDTO.setConfiguration(JsonUtil.toJSONString(JsonUtil.parseObject(datasourceDTO.getConfiguration(), Mysql.class)).toString());
+                        break;
+                    case "h2":
+                        datasourceDTO.setConfiguration(JsonUtil.toJSONString(JsonUtil.parseObject(datasourceDTO.getConfiguration(), H2.class)).toString());
+                        break;
+                    case "oracle":
+                        datasourceDTO.setConfiguration(JsonUtil.toJSONString(JsonUtil.parseObject(datasourceDTO.getConfiguration(), Oracle.class)).toString());
+                        break;
+                    case "sqlServer":
+                        datasourceDTO.setConfiguration(JsonUtil.toJSONString(JsonUtil.parseObject(datasourceDTO.getConfiguration(), Sqlserver.class)).toString());
+                        break;
+                }
             }
         }
         if (datasourceDTO.getType().contains(DatasourceConfiguration.DatasourceType.Excel.toString())) {
@@ -1659,6 +1606,7 @@ public class DatasourceServer implements DatasourceApi {
                 datasourceDTO.setLastSyncTime(task.getStartTime());
             }
         }
+        datasourceDTO.setConfiguration(RsaUtils.symmetricEncrypt(datasourceDTO.getConfiguration()));
         if (StringUtils.isNotBlank(datasourceDTO.getCreateBy())) {
             datasourceDTO.setCreator(coreUserManage.getUserName(Long.valueOf(datasourceDTO.getCreateBy())));
         }
@@ -1713,21 +1661,6 @@ public class DatasourceServer implements DatasourceApi {
     public List<Map<String, String>> multidimensionalTables(Map<String, String> request) throws DEException {
         List<ApiDefinition> paramsList = new ArrayList<>();
         ApiDefinition apiDefinition = JsonUtil.parseObject(new String(java.util.Base64.getDecoder().decode(request.get("data"))), ApiDefinition.class);
-        String sourceId = request.get("datasourceId");
-        List<ApiDefinition> originals = List.of();
-        if (sourceId != null && !sourceId.isBlank() && !"0".equals(sourceId)) {
-            Long id = Long.valueOf(sourceId);
-            if (V3UserUtil.getLink() != null || !corePermissionManage.checkAuth(
-                    new BusiPerCheckDTO(id, BusiResourceEnum.DATASOURCE, AuthEnum.MANAGE))) {
-                throw new DEException(ResultCode.PERMISSION_NO_ACCESS.code(), ResultCode.PERMISSION_NO_ACCESS.message());
-            }
-            DatasourceDTO stored = dataSourceManage.getDs(id);
-            if (stored == null || !Objects.equals(stored.getType(), request.get("dsType"))) {
-                throw new DEException(ResultCode.PARAM_IS_INVALID.code(), Translator.get("i18n_configuration_type_mismatch"));
-            }
-            originals = JsonUtil.parseList(stored.getConfiguration(), listTypeReference);
-        }
-        apiDefinition = restoreApiDefinition(apiDefinition, originals);
         paramsList.add(apiDefinition);
         DatasourceRequest datasourceRequest = new DatasourceRequest();
         DatasourceDTO datasource = new DatasourceDTO();

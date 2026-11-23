@@ -465,15 +465,9 @@ const cancelRole = (row: any) => {
   background: white;
   padding: 24px;
   border-radius: 12px;
-}
 
-.user-table {
-  display: flex;
-  flex-direction: column;
-
-  .member-table__content {
-    flex: 1;
-    min-height: 0;
+  .user-table__content {
+    height: calc(100vh - 296px);
   }
 }
 
@@ -483,7 +477,6 @@ const cancelRole = (row: any) => {
 
 .member-header {
   display: flex;
-  flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;

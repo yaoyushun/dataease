@@ -200,7 +200,10 @@ if (showSystem.value) {
   </el-popover>
 
   <AboutPage />
-  <UcenterHandler v-if="appStore.getXpackValid" @loaded="xpackLinkLoaded"></UcenterHandler>
+  <UcenterHandler
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+    @loaded="xpackLinkLoaded"
+  ></UcenterHandler>
 </template>
 
 <style lang="less">

@@ -13,6 +13,7 @@ import io.dataease.dao.auto.entity.CoreDatasetGroup;
 import io.dataease.dao.auto.entity.CoreDatasource;
 import io.dataease.dataset.constant.DatasetTableType;
 import io.dataease.dataset.dao.auto.mapper.CoreDatasetGroupRepository;
+import io.dataease.dataset.dao.auto.mapper.CoreDatasetTableRepository;
 import io.dataease.dataset.utils.DatasetTableTypeConstants;
 import io.dataease.dataset.utils.SqlUtils;
 import io.dataease.dataset.utils.TableUtils;
@@ -72,6 +73,8 @@ public class DatasetSQLManage {
     private DatasetGroupManage datasetGroupManage;
     @Resource
     private CoreDatasetGroupRepository coreDatasetGroupRepository;
+    @Resource
+    private CoreDatasetTableRepository coreDatasetTableRepository;
     @Resource
     private SysParameterManage sysParameterManage;
 
@@ -162,7 +165,7 @@ public class DatasetSQLManage {
             if (dsMap.containsKey(datasetTable.getDatasourceId())) {
                 schema = dsMap.get(datasetTable.getDatasourceId()).getSchemaAlias();
             } else {
-                schema = putObj2Map(dsMap, datasetTable, isCross, coreDatasource);
+                schema = putObj2Map(dsMap, datasetTable, isCross, coreDatasource, dataTableInfoDTO.getId());
             }
             SQLObj table = getUnionTable(datasetTable, tableInfo, schema, i, filterParameters(chartExtRequest, currentDs.getId()), isFromDataSet, isCross, dsMap, tableFieldWithValues);
             if (i == 0) {
@@ -217,7 +220,7 @@ public class DatasetSQLManage {
             checkedFields.addAll(fields);
             // 获取child的fields和union
             if (!CollectionUtils.isEmpty(unionDTO.getChildrenDs())) {
-                getUnionForEdit(datasetTable, table, unionDTO.getChildrenDs(), checkedInfo, unionList, checkedFields, dsMap, chartExtRequest, isCross, allFields, tableFieldWithValues);
+                getUnionForEdit(datasetTable, table, unionDTO.getChildrenDs(), checkedInfo, unionList, checkedFields, dsMap, chartExtRequest, isCross, allFields, tableFieldWithValues, dataTableInfoDTO.getId());
             }
         }
         // build sql
@@ -347,7 +350,8 @@ public class DatasetSQLManage {
                                  List<UnionParamDTO> unionList, List<DatasetTableFieldDTO> checkedFields,
                                  Map<Long, DatasourceSchemaDTO> dsMap, ChartExtRequest chartExtRequest,
                                  boolean isCross, List<DatasetTableFieldDTO> allFields,
-                                 List<TableFieldWithValue> tableFieldWithValues) throws Exception {
+                                 List<TableFieldWithValue> tableFieldWithValues,
+                                 Long datasetGroupId) throws Exception {
         for (int i = 0; i < childrenDs.size(); i++) {
             int index = unionList.size() + 1;
 
@@ -359,7 +363,7 @@ public class DatasetSQLManage {
             if (dsMap.containsKey(datasetTable.getDatasourceId())) {
                 schema = dsMap.get(datasetTable.getDatasourceId()).getSchemaAlias();
             } else {
-                schema = putObj2Map(dsMap, datasetTable, isCross);
+                schema = putObj2Map(dsMap, datasetTable, isCross, null, datasetGroupId);
             }
             SQLObj table = getUnionTable(datasetTable, tableInfo, schema, index, filterParameters(chartExtRequest, datasetTable.getId()), chartExtRequest == null, isCross, dsMap, tableFieldWithValues);
 
@@ -411,7 +415,7 @@ public class DatasetSQLManage {
             unionToParent.setCurrentSQLObj(table);
             unionList.add(unionToParent);
             if (!CollectionUtils.isEmpty(unionDTO.getChildrenDs())) {
-                getUnionForEdit(datasetTable, table, unionDTO.getChildrenDs(), checkedInfo, unionList, checkedFields, dsMap, chartExtRequest, isCross, allFields, tableFieldWithValues);
+                getUnionForEdit(datasetTable, table, unionDTO.getChildrenDs(), checkedInfo, unionList, checkedFields, dsMap, chartExtRequest, isCross, allFields, tableFieldWithValues, datasetGroupId);
             }
         }
     }
@@ -537,13 +541,25 @@ public class DatasetSQLManage {
     }
 
     public String putObj2Map(Map<Long, DatasourceSchemaDTO> dsMap, DatasetTableDTO ds, boolean isCross) {
-        return putObj2Map(dsMap, ds, isCross, null);
+        return putObj2Map(dsMap, ds, isCross, null, null);
     }
 
     public String putObj2Map(Map<Long, DatasourceSchemaDTO> dsMap, DatasetTableDTO ds, boolean isCross, CoreDatasource coreDatasource) {
-        // 通过datasource id校验数据源权限
+        return putObj2Map(dsMap, ds, isCross, coreDatasource, null);
+    }
+
+    public String putObj2Map(Map<Long, DatasourceSchemaDTO> dsMap, DatasetTableDTO ds, boolean isCross, CoreDatasource coreDatasource, Long datasetGroupId) {
+        // 通过datasource id校验数据源权限；若未直接授予数据源权限，仅允许已授权的持久化数据集访问其DB已绑定的数据源
         BusiPerCheckDTO dto = new BusiPerCheckDTO(ds.getDatasourceId(), BusiResourceEnum.DATASOURCE, AuthEnum.READ);
         boolean checked = corePermissionManage.checkAuth(dto);
+        if (!checked && datasetGroupId != null && ds.getDatasourceId() != null) {
+            boolean hasDatasetRead = corePermissionManage.checkAuth(
+                    new BusiPerCheckDTO(datasetGroupId, BusiResourceEnum.DATASET, AuthEnum.READ));
+            if (hasDatasetRead) {
+                checked = coreDatasetTableRepository.findByDatasetGroupId(datasetGroupId).stream()
+                        .anyMatch(t -> Objects.equals(t.getDatasourceId(), ds.getDatasourceId()));
+            }
+        }
         if (!checked) {
             DEException.throwException(Translator.get("i18n_no_datasource_permission"));
         }

@@ -5,7 +5,6 @@ import { computed, nextTick, ref, toRefs, watch } from 'vue'
 import RangeFilterTime from '@/custom-component/v-query/RangeFilterTime.vue'
 import FilterTime from '@/custom-component/v-query/FilterTime.vue'
 import { useI18n } from '@/hooks/web/useI18n'
-import ClockOffsetEditor from './ClockOffsetEditor.vue'
 import DynamicTime from '@/custom-component/v-query/DynamicTime.vue'
 import DynamicTimeRange from '@/custom-component/v-query/DynamicTimeRange.vue'
 import Time from '@/custom-component/v-query/Time.vue'
@@ -59,7 +58,6 @@ const props = defineProps({
 const showFlag = computed(() => props.showPosition === 'main')
 const { curComponent } = toRefs(props)
 const loadingDefault = ref(true)
-const previewNotesHeight = ref(0)
 watch(
   () => curComponent.value.id,
   val => {
@@ -217,10 +215,6 @@ const relativeToCurrentListRange = computed(() => {
           value: 'thisQuarter'
         },
         {
-          label: t('dynamic_time.last_quarter'),
-          value: 'lastQuarter'
-        },
-        {
           label: t('v_query.last_3_months'),
           value: 'LastThreeMonths'
         },
@@ -260,14 +254,6 @@ const relativeToCurrentListRange = computed(() => {
         {
           label: t('cron.this_month'),
           value: 'thisMonth'
-        },
-        {
-          label: t('dynamic_time.tquarter'),
-          value: 'thisQuarter'
-        },
-        {
-          label: t('dynamic_time.last_quarter'),
-          value: 'lastQuarter'
         },
         {
           label: t('v_query.last_3_days'),
@@ -324,12 +310,6 @@ const aroundList = [
     value: 'b'
   }
 ]
-
-const clockGranularity = computed(() =>
-  curComponent.value.displayType === '7'
-    ? curComponent.value.timeGranularityMultiple === 'datetimerange'
-    : curComponent.value.timeGranularity === 'datetime'
-)
 
 const dynamicTime = computed(() => {
   const { displayType, timeType } = curComponent.value
@@ -614,14 +594,14 @@ defineExpose({
           </div>
         </div>
         <div class="setting" v-if="curComponent.relativeToCurrent === 'custom'">
-          <div v-if="clockGranularity" class="setting-label">
-            {{ t('dynamic_time.date_offset') }}
-          </div>
-          <div class="setting-input" :class="clockGranularity && 'with-date date-offset-only pdl0'">
+          <div
+            class="setting-input"
+            :class="curComponent.timeGranularity === 'datetime' && 'with-date'"
+          >
             <el-input-number
-              :step-strictly="!clockGranularity"
+              step-strictly
               v-model="curComponent.timeNum"
-              :min="clockGranularity ? undefined : 0"
+              :min="0"
               controls-position="right"
             />
             <el-select @focus="handleDialogClick" v-model="curComponent.relativeToCurrentType">
@@ -640,12 +620,12 @@ defineExpose({
                 :value="item.value"
               />
             </el-select>
+            <el-time-picker
+              v-if="curComponent.timeGranularity === 'datetime'"
+              v-model="curComponent.arbitraryTime"
+            />
           </div>
         </div>
-        <ClockOffsetEditor
-          v-if="clockGranularity && curComponent.relativeToCurrent === 'custom'"
-          :config="curComponent"
-        />
       </template>
       <template v-else-if="dynamicTime && curComponent.displayType === '7'">
         <div class="setting">
@@ -671,14 +651,11 @@ defineExpose({
           "
         >
           <div class="setting-label">{{ t('datasource.start_time') }}</div>
-          <div
-            class="setting-input with-date range"
-            :class="clockGranularity && 'date-offset-only'"
-          >
+          <div class="setting-input with-date range">
             <el-input-number
-              :step-strictly="!clockGranularity"
+              step-strictly
               v-model="curComponent.timeNum"
-              :min="clockGranularity ? undefined : 0"
+              :min="0"
               controls-position="right"
             />
             <el-select @focus="handleDialogClick" v-model="curComponent.relativeToCurrentType">
@@ -697,13 +674,9 @@ defineExpose({
                 :value="item.value"
               />
             </el-select>
-            <el-time-picker v-if="!clockGranularity" v-model="curComponent.arbitraryTime" />
+            <el-time-picker v-model="curComponent.arbitraryTime" />
           </div>
         </div>
-        <ClockOffsetEditor
-          v-if="clockGranularity && curComponent.relativeToCurrentRange === 'custom'"
-          :config="curComponent"
-        />
         <div
           class="setting"
           v-if="curComponent.relativeToCurrentRange === 'custom'"
@@ -714,14 +687,11 @@ defineExpose({
           "
         >
           <div class="setting-label">{{ t('datasource.end_time') }}</div>
-          <div
-            class="setting-input with-date range"
-            :class="clockGranularity && 'date-offset-only'"
-          >
+          <div class="setting-input with-date range">
             <el-input-number
               v-model="curComponent.timeNumRange"
-              :min="clockGranularity ? undefined : 0"
-              :step-strictly="!clockGranularity"
+              :min="0"
+              step-strictly
               controls-position="right"
             />
             <el-select @focus="handleDialogClick" v-model="curComponent.relativeToCurrentTypeRange">
@@ -740,23 +710,15 @@ defineExpose({
                 :value="item.value"
               />
             </el-select>
-            <el-time-picker v-if="!clockGranularity" v-model="curComponent.arbitraryTimeRange" />
+            <el-time-picker v-model="curComponent.arbitraryTimeRange" />
           </div>
         </div>
-        <ClockOffsetEditor
-          v-if="clockGranularity && curComponent.relativeToCurrentRange === 'custom'"
-          :config="curComponent"
-          end
-        />
       </template>
     </div>
     <div
       v-if="curComponent.defaultValueCheck && loadingDefault"
       class="parameters"
       :class="dynamicTime && 'setting'"
-      :style="{
-        paddingBottom: dynamicTime && previewNotesHeight ? `${previewNotesHeight}px` : undefined
-      }"
     >
       <div class="setting-label" v-if="dynamicTime">{{ t('template_manage.preview') }}</div>
       <div v-if="defaultValueFirstItemShow" class="first-item" style="margin-bottom: 8px">
@@ -765,13 +727,7 @@ defineExpose({
         }}</el-checkbox>
       </div>
       <div :class="dynamicTime ? 'setting-value' : 'w100'">
-        <component
-          :config="curComponent"
-          isConfig
-          ref="inputCom"
-          :is="filterTypeCom"
-          @notes-height="previewNotesHeight = $event"
-        ></component>
+        <component :config="curComponent" isConfig ref="inputCom" :is="filterTypeCom"></component>
       </div>
     </div>
   </div>
@@ -985,7 +941,7 @@ defineExpose({
       width: 100%;
       padding-left: 24px;
       .ed-date-editor {
-        width: 322px !important;
+        width: 325px !important;
       }
     }
     margin-left: auto;
@@ -1002,13 +958,14 @@ defineExpose({
       &.select {
         margin-top: 0;
         .ed-select {
-          width: 322px;
+          width: 325px;
         }
       }
     }
 
     .setting-input {
       display: flex;
+      padding-left: 86px;
       justify-content: flex-end;
       align-items: center;
       width: 100%;
@@ -1034,21 +991,6 @@ defineExpose({
         .ed-date-editor.ed-input {
           width: 106px;
         }
-      }
-    }
-
-    .setting-input.with-date.date-offset-only {
-      flex: 1;
-      min-width: 0;
-      .ed-input-number,
-      .ed-select {
-        flex: 1;
-        width: 0;
-        min-width: 0;
-      }
-
-      &.pdl0 {
-        padding-left: 0 !important;
       }
     }
 

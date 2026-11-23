@@ -1,20 +1,8 @@
 <script setup lang="ts">
-import { useLatestQuery } from '@/hooks/web/useQueryScope'
-const canvasQuery = useLatestQuery('canvas-load')
 import request from '@/config/axios'
-import { queryDefaultSnapshot } from '@/utils/queryDefaultSnapshot'
 import { dvMainStoreWithOut } from '@/store/modules/data-visualization/dvMain'
 import { useLinkStoreWithOut } from '@/store/modules/link'
-import {
-  computed,
-  nextTick,
-  onMounted,
-  onUnmounted,
-  reactive,
-  ref,
-  watch,
-  defineAsyncComponent
-} from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch, defineAsyncComponent } from 'vue'
 import DePreview from '@/components/data-visualization/canvas/DePreview.vue'
 import router from '@/router'
 import { useEmitt } from '@/hooks/web/useEmitt'
@@ -80,13 +68,7 @@ const props = defineProps({
   ticketArgs: propTypes.string.def(null)
 })
 
-let reportDefaultsKey: string | undefined
-onUnmounted(() => {
-  if (reportDefaultsKey) delete window[reportDefaultsKey]
-})
 const loadCanvasDataAsync = async (dvId, dvType, ignoreParams = false) => {
-  if (reportDefaultsKey) delete window[reportDefaultsKey]
-  reportDefaultsKey = undefined
   const jumpInfoParam = embeddedStore.jumpInfoParam || router.currentRoute.value.query.jumpInfoParam
   let jumpParam
   // 获取外部跳转参数
@@ -155,8 +137,7 @@ const loadCanvasDataAsync = async (dvId, dvType, ignoreParams = false) => {
       busiFlag: dvType,
       resourceTable: state.editPreview ? 'snapshot' : 'core',
       onlyPreview: !!props.outerId,
-      awaitLoad: props.publicLinkStatus,
-      queryRequest: canvasQuery.start()
+      awaitLoad: props.publicLinkStatus
     },
     async function ({
       canvasDataResult,
@@ -172,10 +153,6 @@ const loadCanvasDataAsync = async (dvId, dvType, ignoreParams = false) => {
         }
       }
       state.canvasDataPreview = canvasDataResult
-      if (router.currentRoute.value.query.taskId) {
-        reportDefaultsKey = `de-report-query-defaults-${dvId}`
-        window[reportDefaultsKey] = () => queryDefaultSnapshot(canvasDataResult, t)
-      }
       state.canvasStylePreview = canvasStyleResult
       state.canvasViewInfoPreview = canvasViewInfoPreview
       if (state.editPreview) {
@@ -241,7 +218,7 @@ onMounted(async () => {
     }
   })
   console.info('Preview Canvas init')
-  if (!props.outerId && appStore.getXpackValid) {
+  if (!props.outerId && (appStore.getXpackValid || appStore.getBluewingEnabled)) {
     await Promise.all([xpackReadyPromise, iframeReadyPromise])
   }
   console.info('Preview Canvas Promise End')
@@ -325,11 +302,15 @@ defineExpose({
       img-type="noneWhite"
     />
   </div>
-  <NewWindowHandler v-if="appStore.getXpackValid" @loaded="XpackLoaded" @load-fail="XpackLoaded">
+  <NewWindowHandler
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+    @loaded="XpackLoaded"
+    @load-fail="XpackLoaded"
+  >
   </NewWindowHandler>
 
   <Entrances
-    v-if="appStore.getXpackValid"
+    v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
     @init-iframe="initIframe"
     @load-fail="initIframe"
   ></Entrances>
@@ -339,7 +320,6 @@ defineExpose({
 ::-webkit-scrollbar {
   display: none;
 }
-
 .content {
   position: relative;
   background-color: #ffffff;

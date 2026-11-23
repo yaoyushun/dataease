@@ -14,14 +14,11 @@ const props = defineProps({
     type: Array as PropType<Field[]>,
     default: () => []
   },
-  node: propTypes.object.def({}),
-  disabled: propTypes.bool.def(false),
-  showToolbar: propTypes.bool.def(true),
-  detailed: propTypes.bool.def(false)
+  node: propTypes.object.def({})
 })
 const emit = defineEmits(['checkedFields'])
 const multipleTableRef = ref<InstanceType<typeof ElTable>>()
-const search = defineModel<string>('search', { default: '' })
+const search = ref('')
 const checkAll = ref(false)
 const isIndeterminate = ref(true)
 const handleCheckAllChange = (val: boolean) => {
@@ -55,21 +52,34 @@ const handleSelectionChange = val => {
   emit('checkedFields', multipleSelection.value)
 }
 watch(
-  [search, () => props.fieldList],
-  ([value]) => {
-    const keyword = value.trim().toLocaleLowerCase()
-    fieldSearchList.value = keyword
-      ? props.fieldList.filter(field => field.originName.toLocaleLowerCase().includes(keyword))
-      : props.fieldList
-    handleSelectionChange(fieldSearchList.value.filter(field => field.checked))
+  search,
+  val => {
+    if (val.trim() !== '') {
+      fieldSearchList.value = props.fieldList.filter(ele =>
+        ele.originName.toLocaleLowerCase().includes(val.trim().toLocaleLowerCase())
+      )
+    } else {
+      fieldSearchList.value = props.fieldList
+    }
+    handleSelectionChange(fieldSearchList.value.filter(ele => ele.checked))
   },
-  { immediate: true }
+  {
+    immediate: true
+  }
+)
+
+watch(
+  () => props.fieldList,
+  () => {
+    fieldSearchList.value = props.fieldList
+    handleSelectionChange(fieldSearchList.value.filter(ele => ele.checked))
+  }
 )
 </script>
 
 <template>
   <div class="field-block-style">
-    <div v-if="showToolbar" class="field-block-option">
+    <div class="field-block-option">
       <span class="option-field"
         >{{ $t('dataset.field_select') }}({{ multipleSelection.length }}/{{
           fieldList.length
@@ -101,23 +111,18 @@ watch(
         <el-table-column align="center" width="55">
           <template #header>
             <el-checkbox
-              :disabled="disabled"
               v-model="checkAll"
               :indeterminate="isIndeterminate"
               @change="handleCheckAllChange"
             />
           </template>
           <template #default="scope">
-            <el-checkbox :disabled="disabled" @change="checkChange" v-model="scope.row.checked" />
+            <el-checkbox @change="checkChange" v-model="scope.row.checked" />
           </template>
         </el-table-column>
-        <el-table-column
-          :label="t('dataset.origin_name')"
-          :min-width="detailed ? 160 : undefined"
-          show-overflow-tooltip
-        >
+        <el-table-column :label="t('dataset.origin_name')">
           <template #default="scope">
-            <el-icon v-if="!detailed">
+            <el-icon>
               <Icon
                 ><component
                   class="svg-icon"
@@ -126,21 +131,16 @@ watch(
                 ></component
               ></Icon>
             </el-icon>
-            <span :class="{ 'physical-field-name': detailed }">{{ scope.row.originName }}</span>
+            {{ scope.row.originName }}
           </template>
         </el-table-column>
-        <slot name="columns">
-          <el-table-column property="description" :label="t('deDataset.description')" />
-        </slot>
+        <el-table-column property="description" :label="t('deDataset.description')" />
       </el-table>
     </div>
   </div>
 </template>
 
 <style lang="less" scoped>
-.physical-field-name {
-  color: var(--deTextSecondary, #646a73);
-}
 .field-block-style {
   height: 100%;
   width: 100%;

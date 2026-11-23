@@ -65,7 +65,7 @@ function getThisWeek(): [Date, Date] {
   ]
 }
 
-function getCustomRange(relativeToCurrentRange: string, baseline = new Date()): [Date, Date] {
+function getCustomRange(relativeToCurrentRange: string): [Date, Date] {
   switch (relativeToCurrentRange) {
     case 'thisYear':
       return [getThisStart('year'), getThisEnd('year')]
@@ -76,13 +76,7 @@ function getCustomRange(relativeToCurrentRange: string, baseline = new Date()): 
     case 'lastMonth':
       return [getLastStart('month'), getLastEnd('month')]
     case 'thisQuarter':
-    case 'lastQuarter': {
-      const quarter = dayjs(baseline).subtract(
-        relativeToCurrentRange === 'lastQuarter' ? 1 : 0,
-        'quarter'
-      )
-      return [quarter.startOf('quarter').toDate(), quarter.endOf('quarter').millisecond(0).toDate()]
-    }
+      return [getThisStart('quarter'), getThisEnd('quarter')]
     case 'thisWeek':
       return getThisWeek()
     case 'LastThreeMonths':

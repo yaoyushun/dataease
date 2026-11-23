@@ -15,8 +15,6 @@ import {
   toRefs
 } from 'vue'
 import { getData } from '@/api/chart'
-import { useLatestQuery } from '@/hooks/web/useQueryScope'
-import { provideChartRuntimeCache } from '@/hooks/web/useChartRuntimeCache'
 import {
   tableImageUrl,
   TABLE_IMAGE_PLACEHOLDER
@@ -149,92 +147,45 @@ const normalizeChartData = (data?: Partial<Chart['data']> | null): Partial<Chart
 // 图表数据不用全响应式
 let chartData = shallowRef<Partial<Chart['data']>>(normalizeChartData())
 
-const chartRuntime = provideChartRuntimeCache(
-  () => props.view as Chart,
-  () => props.showPosition
-)
-
-const containerId =
-  'container-' +
-  showPosition.value +
-  '-' +
-  view.value.id +
-  '-' +
-  suffixId.value +
-  '-' +
-  chartRuntime.id
+const containerId = 'container-' + showPosition.value + '-' + view.value.id + '-' + suffixId.value
 const viewTrack = ref(null)
 
-const dataQuery = useLatestQuery('chart-data')
-let chartRenderVersion = 0
-let pendingQueryCallback: (() => void) | undefined
-const invalidateQuery = () => {
-  dataQuery.invalidate()
-  pendingQueryCallback = undefined
-  chartRenderVersion++
-  debounceRender.cancel()
-  resolveRenderChart()
-}
-
 const calcData = (viewInfo: Chart, callback, resetPageInfo = true) => {
-  const complete = callback || pendingQueryCallback
-  invalidateQuery()
-  pendingQueryCallback = complete
-  const request = dataQuery.start()
-  try {
-    if (viewInfo.customAttr.basicStyle.tablePageStyle === 'general') {
-      if (state.currentPageSize !== 0) {
-        viewInfo.chartExtRequest.pageSize = state.currentPageSize
-        state.pageInfo.pageSize = state.currentPageSize
-      } else {
-        viewInfo.chartExtRequest.pageSize = state.pageInfo.pageSize
-      }
+  if (viewInfo.customAttr.basicStyle.tablePageStyle === 'general') {
+    if (state.currentPageSize !== 0) {
+      viewInfo.chartExtRequest.pageSize = state.currentPageSize
+      state.pageInfo.pageSize = state.currentPageSize
     } else {
-      delete viewInfo.chartExtRequest?.pageSize
+      viewInfo.chartExtRequest.pageSize = state.pageInfo.pageSize
     }
-    if (viewInfo.tableId || viewInfo['dataFrom'] === 'template') {
-      isError.value = false
-      const v = JSON.parse(JSON.stringify(viewInfo))
-      return getData(v, request)
-        .then(async res => {
-          if (!request.isCurrent()) return
-          if (res.code && res.code !== 0) {
-            isError.value = true
-            errMsg.value = res.msg
-          } else {
-            chartData.value = normalizeChartData(res?.data as Partial<Chart['data']> | null)
-            state.totalItems = res?.totalItems
-            chartRuntime.setDetails(res)
-            if (chartRuntime.publishToStore) dvMainStore.setViewDataDetails(viewInfo.id, res)
-            if (!res.drill) {
-              chartRuntime.pureData = res.data
-              if (chartRuntime.publishToStore)
-                dvMainStore.setPureCanvasViewDataInfo(viewInfo.id, res)
-            }
-            emit('onDrillFilters', res?.drillFilters)
-            await renderChart(res as unknown as Chart, resetPageInfo)
+  } else {
+    delete viewInfo.chartExtRequest?.pageSize
+  }
+  if (viewInfo.tableId || viewInfo['dataFrom'] === 'template') {
+    isError.value = false
+    const v = JSON.parse(JSON.stringify(viewInfo))
+    getData(v)
+      .then(res => {
+        if (res.code && res.code !== 0) {
+          isError.value = true
+          errMsg.value = res.msg
+        } else {
+          chartData.value = normalizeChartData(res?.data as Partial<Chart['data']> | null)
+          state.totalItems = res?.totalItems
+          dvMainStore.setViewDataDetails(viewInfo.id, res)
+          if (!res.drill) {
+            dvMainStore.setPureCanvasViewDataInfo(viewInfo.id, res)
           }
-          if (request.isCurrent()) {
-            pendingQueryCallback = undefined
-            complete?.()
-          }
-        })
-        .catch(() => {
-          if (request.isCurrent()) {
-            pendingQueryCallback = undefined
-            complete?.()
-          }
-        })
-        .finally(request.finish)
-    } else {
-      request.finish()
-      pendingQueryCallback = undefined
-      complete?.()
-    }
-  } catch (error) {
-    request.finish()
-    if (request.isCurrent()) pendingQueryCallback = undefined
-    throw error
+          emit('onDrillFilters', res?.drillFilters)
+          renderChart(res as unknown as Chart, resetPageInfo)
+        }
+        callback?.()
+      })
+      .catch(() => {
+        callback?.()
+      })
+  } else {
+    callback?.()
   }
 }
 // 图表对象不用响应式
@@ -346,10 +297,7 @@ const renderChart = (viewInfo: Chart, resetPageInfo?: boolean) => {
   setupPage(actualChart, resetPageInfo)
   return new Promise<void>(resolve => {
     renderChartResolvers.push(resolve)
-    const version = ++chartRenderVersion
-    nextTick(() => {
-      if (!chartComponentUnmounted && version === chartRenderVersion) debounceRender()
-    })
+    nextTick(() => debounceRender())
   })
 }
 
@@ -376,7 +324,7 @@ const debounceRender = debounce(() => {
       actualChart.render,
       actualChart.type
     ) as S2ChartView<any>
-    myChart = chartView.drawChart({
+    myChart = ((window as any)._renderBwKpiCard && (window as any)._renderBwKpiCard(containerId, toRaw(actualChart))) || chartView.drawChart({
       container: containerId,
       chart: toRaw(actualChart),
       chartObj: myChart,
@@ -406,8 +354,7 @@ const debounceRender = debounce(() => {
       sheet.on(S2Event.LAYOUT_AFTER_REAL_DATA_CELL_RENDER, markDataCellBackgrounds)
     }
     myChart?.render()
-    chartRuntime.instance = myChart
-    if (chartRuntime.publishToStore) dvMainStore.setViewInstanceInfo(actualChart.id, myChart)
+    dvMainStore.setViewInstanceInfo(actualChart.id, myChart)
     initScroll()
   } finally {
     resolveRenderChart()
@@ -434,8 +381,7 @@ const setupPage = (chart: ChartObj, resetPageInfo?: boolean) => {
   if (resetPageInfo) {
     state.pageInfo.currentPage = 1
   }
-  chartRuntime.pageInfo = state.pageInfo
-  if (chartRuntime.publishToStore) dvMainStore.setViewPageInfo(chart.id, state.pageInfo)
+  dvMainStore.setViewPageInfo(chart.id, state.pageInfo)
 }
 
 const mouseMove = () => {
@@ -680,14 +626,14 @@ const trackClick = trackAction => {
       emit('onPointClick', clickParams)
       break
     case 'linkageAndDrill':
-      dvMainStore.addViewTrackFilter(linkageParam, chartRuntime.data)
+      dvMainStore.addViewTrackFilter(linkageParam)
       emit('onChartClick', param)
       break
     case 'drill':
       emit('onChartClick', param)
       break
     case 'linkage':
-      dvMainStore.addViewTrackFilter(linkageParam, chartRuntime.data)
+      dvMainStore.addViewTrackFilter(linkageParam)
       break
     case 'jump':
       if (mobileInPc.value && !inMobile.value) return
@@ -826,7 +772,6 @@ const resizeAction = resizeColumn => {
   emitter.emit('set-table-column-width', tableWidth)
 }
 defineExpose({
-  invalidateQuery,
   calcData,
   renderChart,
   renderChartFromDialog,
@@ -854,8 +799,7 @@ const resize = (width, height) => {
       myChart?.facet?.timer?.stop()
       myChart?.changeSheetSize(width, height)
       myChart?.render()
-      chartRuntime.instance = myChart
-      if (chartRuntime.publishToStore) dvMainStore.setViewInstanceInfo(actualChart.id, myChart)
+      dvMainStore.setViewInstanceInfo(actualChart.id, myChart)
     }
     initScroll()
   }, 500)
@@ -886,7 +830,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   try {
     chartComponentUnmounted = true
-    invalidateQuery()
     timer && clearTimeout(timer)
     scrollTimer && clearTimeout(scrollTimer)
     debounceRender.cancel()

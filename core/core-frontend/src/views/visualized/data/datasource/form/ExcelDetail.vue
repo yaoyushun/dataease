@@ -28,7 +28,6 @@ import { iconFieldMap } from '@/components/icon-group/field-list'
 import { boolean } from 'mathjs'
 
 export interface Param {
-  copySourceId?: string | number
   editType: number
   pid?: string
   type?: string
@@ -266,7 +265,7 @@ const saveExcelDs = (params, successCb, finallyCb) => {
           return
         }
       }
-      selectedSheet.push(cloneDeep(selectNode[i]))
+      selectedSheet.push(selectNode[i])
       sheetFileMd5.push(selectNode[i].fieldsMd5)
     }
   }

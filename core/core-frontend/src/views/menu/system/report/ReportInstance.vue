@@ -405,7 +405,12 @@ const drawerMainClose = () => {
         >
           <template #default="scope">
             <div class="operate-icon-container">
-              <el-tooltip effect="dark" :content="t('sync_task.view_execute_log')" placement="top">
+              <el-tooltip
+                effect="dark"
+                :content="t('sync_task.view_execute_log')"
+                placement="top"
+                v-if="scope.row.execStatus === 3"
+              >
                 <template #default>
                   <el-button text @click="showLogDetail(scope.row)" class="detail-button">
                     <template #icon>

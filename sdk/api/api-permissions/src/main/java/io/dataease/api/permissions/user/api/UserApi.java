@@ -19,8 +19,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import jakarta.validation.Valid;
-
 import java.util.List;
 import java.util.Map;
 
@@ -129,7 +127,7 @@ public interface UserApi {
 
     @Operation(summary = "切换语言")
     @PostMapping("/switchLanguage")
-    void switchLanguage(@Valid @RequestBody LangSwitchRequest request);
+    void switchLanguage(@RequestBody LangSwitchRequest request);
 
     @Operation(summary = "下载批量导入模版")
     @PostMapping("/excelTemplate")

@@ -74,6 +74,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -81,9 +82,8 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.util.*;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -102,15 +102,13 @@ public class ExportCenterDownLoadManage {
     private int core;
     @Value("${dataease.export.max.size:10}")
     private int max;
-    @Value("${dataease.export.queue.size:100}")
-    private int queueSize;
 
     @Value("${dataease.path.exportData:/opt/dataease3.0/data/exportData/}")
     private String exportData_path;
     @Value("${dataease.export.page.size:50000}")
     private Integer extractPageSize;
     static private List<String> STATUS = Arrays.asList("SUCCESS", "FAILED", "PENDING", "IN_PROGRESS", "ALL");
-    private ThreadPoolExecutor exportThreadPool;
+    private ScheduledThreadPoolExecutor scheduledThreadPoolExecutor;
     private int keepAliveSeconds = 600;
     private Map<String, Future> Running_Task = new HashMap<>();
     @Resource
@@ -160,8 +158,9 @@ public class ExportCenterDownLoadManage {
 
     @PostConstruct
     public void init() {
-        exportThreadPool = new ThreadPoolExecutor(core, max, keepAliveSeconds, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(Math.max(1, queueSize)), new ThreadPoolExecutor.AbortPolicy());
+        scheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(core);
+        scheduledThreadPoolExecutor.setKeepAliveTime(keepAliveSeconds, TimeUnit.SECONDS);
+        scheduledThreadPoolExecutor.setMaximumPoolSize(max);
     }
 
     @Scheduled(fixedRate = 5000)
@@ -213,9 +212,8 @@ public class ExportCenterDownLoadManage {
         exportTarget.createParentDirectory();
         Long uid = V3UserUtil.getUid();
         Long proxyOid = V3UserUtil.getProxy().getProxyOid();
-        Future future = exportThreadPool.submit(() -> {
+        Future future = scheduledThreadPoolExecutor.submit(() -> {
             try {
-                LocaleContextHolder.setLocale(parseLocale(request));
                 V3UserUtil.setUid(uid);
                 if (ObjectUtils.isNotEmpty(proxyOid) && proxyOid > 0) {
                     V3UserUtil.setProxy(proxyOid);
@@ -241,7 +239,6 @@ public class ExportCenterDownLoadManage {
                 LogUtil.error("Failed to export data", e);
                 updateExportTask(exportTarget.taskId(), "FAILED", null, e.getMessage(), null, null);
             } finally {
-                LocaleContextHolder.resetLocaleContext();
                 V3UserUtil.clear();
             }
         });
@@ -257,7 +254,7 @@ public class ExportCenterDownLoadManage {
         Object proxyObj = request.get("proxy");
         Long proxyOid = ObjectUtils.isNotEmpty(proxyObj) ? Long.parseLong(proxyObj.toString()) : null;
         final List<Long> scope = resolveLogScope(request);
-        Future future = exportThreadPool.submit(() -> {
+        Future future = scheduledThreadPoolExecutor.submit(() -> {
             coreExportTaskRepository.saveAndFlush(exportTask);
             V3UserUtil.setUid(userId);
             if (ObjectUtils.isNotEmpty(proxyOid) && proxyOid > 0) {
@@ -314,7 +311,7 @@ public class ExportCenterDownLoadManage {
         Long uid = V3UserUtil.getUid();
         Long proxyOid = V3UserUtil.getProxy().getProxyOid();
         String clientIp = IPUtils.get();
-        Future future = exportThreadPool.submit(() -> {
+        Future future = scheduledThreadPoolExecutor.submit(() -> {
             try {
                 V3UserUtil.setUid(uid);
                 if (ObjectUtils.isNotEmpty(proxyOid) && proxyOid > 0) {
@@ -556,7 +553,7 @@ public class ExportCenterDownLoadManage {
         Long uid = V3UserUtil.getUid();
         Long proxyOid = V3UserUtil.getProxy().getProxyOid();
         String clientIp = IPUtils.get();
-        Future future = exportThreadPool.submit(() -> {
+        Future future = scheduledThreadPoolExecutor.submit(() -> {
             try {
                 V3UserUtil.setUid(uid);
                 if (ObjectUtils.isNotEmpty(proxyOid) && proxyOid > 0) {
@@ -719,18 +716,14 @@ public class ExportCenterDownLoadManage {
 
     public void addWatermarkTools(Workbook wb) {
         VisualizationWatermark watermark = watermarkRepository.findById("system_default").orElse(null);
-        if (watermark == null || StringUtils.isBlank(watermark.getSettingContent())) {
-            return;
-        }
         WatermarkContentDTO watermarkContent = JsonUtil.parseObject(watermark.getSettingContent(), WatermarkContentDTO.class);
-        if (watermarkContent == null || !Boolean.TRUE.equals(watermarkContent.getEnable()) || !Boolean.TRUE.equals(watermarkContent.getExcelEnable())) {
-            return;
-        }
-        UserFormVO userInfo = CommonBeanFactory.getBean(UserApi.class).queryById(V3UserUtil.getUid());
-        // 在主逻辑中添加水印
-        int watermarkPictureIdx = ExcelWatermarkUtils.addWatermarkImage(wb, watermarkContent, userInfo); // 生成水印图片并获取 ID
-        for (Sheet sheet : wb) {
-            ExcelWatermarkUtils.addWatermarkToSheet(sheet, watermarkPictureIdx); // 为每个 Sheet 添加水印
+        if (watermarkContent.getEnable() && watermarkContent.getExcelEnable()) {
+            UserFormVO userInfo = CommonBeanFactory.getBean(UserApi.class).queryById(V3UserUtil.getUid());
+            // 在主逻辑中添加水印
+            int watermarkPictureIdx = ExcelWatermarkUtils.addWatermarkImage(wb, watermarkContent, userInfo); // 生成水印图片并获取 ID
+            for (Sheet sheet : wb) {
+                ExcelWatermarkUtils.addWatermarkToSheet(sheet, watermarkPictureIdx); // 为每个 Sheet 添加水印
+            }
         }
     }
 
@@ -958,5 +951,18 @@ public class ExportCenterDownLoadManage {
             }
         }
         cell.setCellValue(value);
+    }
+
+
+    private void validateDownloadPath(String filePath) {
+        try {
+            File resolved = new File(filePath).getCanonicalFile();
+            File base = new File(exportData_path).getCanonicalFile();
+            if (!resolved.getAbsolutePath().startsWith(base.getAbsolutePath())) {
+                throw new RuntimeException("非法的下载路径");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("路径解析失败");
+        }
     }
 }

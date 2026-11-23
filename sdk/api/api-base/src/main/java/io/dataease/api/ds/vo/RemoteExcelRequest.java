@@ -5,6 +5,5 @@ import lombok.Data;
 @Data
 public class RemoteExcelRequest extends ExcelConfiguration {
     private Long datasourceId;
-    private Long copySourceId;
     private int editType;
 }

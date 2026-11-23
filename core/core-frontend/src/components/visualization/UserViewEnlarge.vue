@@ -152,8 +152,6 @@
 </template>
 
 <script setup lang="ts">
-import type { ChartRuntimeSnapshot } from '@/hooks/web/useChartRuntimeCache'
-let sourceRuntime: ChartRuntimeSnapshot | undefined
 import { waitForResourceImages } from '@/utils/resourceImageCache'
 import ComponentWrapper from '@/components/data-visualization/canvas/ComponentWrapper.vue'
 import { computed, h, nextTick, reactive, ref } from 'vue'
@@ -302,16 +300,8 @@ const pixelOptions = [
     ]
   }
 ]
-const dialogInit = (
-  canvasStyle,
-  view,
-  item,
-  opt,
-  params: { scale: number; runtime?: ChartRuntimeSnapshot } = { scale: 0.5 }
-) => {
+const dialogInit = (canvasStyle, view, item, opt, params = { scale: 0.5 }) => {
   if (opt === 'details' && !shareAllows(1)) return
-  sourceRuntime = params.runtime
-  view = sourceRuntime?.view || view
   state.scale = params.scale
   sourceViewType.value = view.type
   detailsError.value = false
@@ -320,7 +310,6 @@ const dialogInit = (
   state.componentSourceType = view.type
   state.dataFrom = view.dataFrom
   viewInfo.value = deepCopy(view) as DeepPartial<ChartObj>
-  if (sourceRuntime) viewInfo.value.chartExtRequest = deepCopy(sourceRuntime.request)
   viewInfo.value.customStyle.text.show = false
   config.value = deepCopy(item)
   if (opt === 'details') {
@@ -344,9 +333,7 @@ const dialogInit = (
 
 const dataDetailsOpt = () => {
   nextTick(() => {
-    const viewDataInfo = sourceRuntime
-      ? sourceRuntime.data
-      : dvMainStore.getViewDataDetails(viewInfo.value.id)
+    const viewDataInfo = dvMainStore.getViewDataDetails(viewInfo.value.id)
     if (viewDataInfo) {
       if (sourceViewType.value.includes('chart-mix')) {
         chartComponentDetails.value?.renderChartFromDialog(viewInfo.value, viewDataInfo.left)
@@ -362,9 +349,7 @@ const dataDetailsOpt = () => {
 
 const handleClick = tab => {
   nextTick(() => {
-    const viewDataInfo = sourceRuntime
-      ? sourceRuntime.data
-      : dvMainStore.getViewDataDetails(viewInfo.value.id)
+    const viewDataInfo = dvMainStore.getViewDataDetails(viewInfo.value.id)
     if (tab === 'left') {
       chartComponentDetails.value?.renderChartFromDialog(viewInfo.value, viewDataInfo.left)
     } else if (tab === 'right') {
@@ -380,29 +365,23 @@ const downloadViewImage = () => {
 
 const downloadViewDetails = (downloadType = 'view') => {
   if (!shareAllows(2)) return
-  const viewDataInfo = sourceRuntime
-    ? sourceRuntime.data
-    : dvMainStore.getViewDataDetails(viewInfo.value.id)
-  const viewInfoSource = sourceRuntime
-    ? sourceRuntime.view
-    : dvMainStore.getViewDetails(viewInfo.value.id)
+  const viewDataInfo = dvMainStore.getViewDataDetails(viewInfo.value.id)
+  const viewInfoSource = dvMainStore.getViewDetails(viewInfo.value.id)
   if (!viewDataInfo) {
     ElMessage.error(t('chart.field_is_empty_export_error'))
     return
   }
-  const chartExtRequest = sourceRuntime
-    ? sourceRuntime.request
-    : dvMainStore.getLastViewRequestInfo(viewInfo.value.id)
+  const chartExtRequest = dvMainStore.getLastViewRequestInfo(viewInfo.value.id)
   const chart = {
     ...viewInfoSource,
     chartExtRequest,
     data: viewDataInfo,
     type: sourceViewType.value,
     downloadType: downloadType,
-    busiFlag: sourceRuntime?.canvasInfo?.type || dvInfo.value.type
+    busiFlag: dvInfo.value.type
   }
   exportLoading.value = true
-  exportExcelDownload(chart, sourceRuntime?.canvasInfo?.name || dvInfo.value.name, () => {
+  exportExcelDownload(chart, dvInfo.value.name, () => {
     openMessageLoading(exportData)
   })
   exportLoading.value = false
@@ -410,13 +389,11 @@ const downloadViewDetails = (downloadType = 'view') => {
 
 const exportAsFormattedExcel = () => {
   if (!shareAllows(2)) return
-  const s2Instance = sourceRuntime
-    ? sourceRuntime.instance
-    : dvMainStore.getViewInstanceInfo(viewInfo.value.id)
+  const s2Instance = dvMainStore.getViewInstanceInfo(viewInfo.value.id)
   if (!s2Instance) {
     return
   }
-  const chart = sourceRuntime ? sourceRuntime.view : dvMainStore.getViewDetails(viewInfo.value.id)
+  const chart = dvMainStore.getViewDetails(viewInfo.value.id)
   exportPivotExcel(s2Instance, chart)
 }
 const exportData = () => {

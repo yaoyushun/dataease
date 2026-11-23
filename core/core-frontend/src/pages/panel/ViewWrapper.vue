@@ -1,7 +1,4 @@
 <script lang="ts" setup>
-import { provideQueryScope, useLatestQuery } from '@/hooks/web/useQueryScope'
-provideQueryScope()
-const canvasQuery = useLatestQuery('canvas-load')
 import {
   ref,
   onBeforeMount,
@@ -11,7 +8,6 @@ import {
   onMounted,
   defineAsyncComponent
 } from 'vue'
-import { registerCanvasRuntime, type CanvasRuntime } from '@/hooks/web/useChartRuntimeCache'
 import { initCanvasData, onInitReady } from '@/utils/canvasUtils'
 import { interactiveStoreWithOut } from '@/store/modules/interactive'
 import { useEmbedded } from '@/store/modules/embedded'
@@ -48,16 +44,6 @@ const state = reactive({
   initState: true,
   scale: 100
 })
-
-const canvasRuntimeId = registerCanvasRuntime(
-  () =>
-    ({
-      componentData: state.canvasDataPreview,
-      canvasStyleData: state.canvasStylePreview,
-      canvasViewInfo: state.canvasViewInfoPreview,
-      dvInfo: state.dvInfo
-    } as CanvasRuntime)
-)
 
 const embeddedParams = embeddedParamsDiv?.chartId ? embeddedParamsDiv : embeddedStore
 
@@ -129,7 +115,7 @@ onBeforeMount(async () => {
 
   initCanvasData(
     embeddedParams.dvId,
-    { busiFlag: embeddedParams.busiFlag, queryRequest: canvasQuery.start() },
+    { busiFlag: embeddedParams.busiFlag },
     function ({ canvasDataResult, canvasStyleResult, dvInfo, canvasViewInfoPreview }) {
       state.canvasDataPreview = canvasDataResult
       state.canvasStylePreview = canvasStyleResult
@@ -178,11 +164,8 @@ onBeforeMount(async () => {
     }
   )
 })
-const userViewEnlargeOpen = (opt, runtime?) => {
-  userViewEnlargeRef.value.dialogInit(state.canvasStylePreview, viewInfo.value, config.value, opt, {
-    scale: state.scale / 100,
-    runtime
-  })
+const userViewEnlargeOpen = opt => {
+  userViewEnlargeRef.value.dialogInit(state.canvasStylePreview, viewInfo.value, config.value, opt)
 }
 
 const onPointClick = param => {
@@ -227,12 +210,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div
-    :data-canvas-runtime="canvasRuntimeId"
-    class="de-view-wrapper"
-    ref="previewViewCanvas"
-    v-if="!!config && state.initState"
-  >
+  <div class="de-view-wrapper" ref="previewViewCanvas" v-if="!!config && state.initState">
     <ComponentWrapper
       style="width: 100%; height: 100%"
       :scale="state.scale"
@@ -248,7 +226,7 @@ onMounted(() => {
     <user-view-enlarge ref="userViewEnlargeRef"></user-view-enlarge>
   </div>
   <empty-background v-if="!state.initState" description="参数不能为空" img-type="noneWhite" />
-  <OpenHandler v-if="appStore.getXpackValid" ref="openHandler" />
+  <OpenHandler v-if="appStore.getXpackValid || appStore.getBluewingEnabled" ref="openHandler" />
 </template>
 
 <style lang="less" scoped>

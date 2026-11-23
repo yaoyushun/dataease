@@ -14,29 +14,32 @@ export class PreviewSheetTabContextMenuController extends Disposable {
       return
     }
 
-    // onRendered runs after Univer has mounted the sheet tab bar.
-    const tabBar = this.resolveContainer()?.querySelector<HTMLElement>(
-      '[data-u-comp="slide-tab-bar"]'
-    )
-    if (!tabBar) {
+    const container = this.resolveContainer()
+    if (!container) {
       return
     }
 
-    // Block bubbling before Univer's React context-menu handler on the parent.
-    tabBar.addEventListener('contextmenu', this.handleContextMenu)
+    container.addEventListener('contextmenu', this.handleContextMenu, true)
     this.disposeWithMe({
-      dispose: () => tabBar.removeEventListener('contextmenu', this.handleContextMenu)
+      dispose: () => container.removeEventListener('contextmenu', this.handleContextMenu, true)
     })
   }
 
   private readonly handleContextMenu = (event: Event): void => {
+    const target = event.target
+    // SheetBarTabs has no scoped context-menu switch in Univer 0.25.1.
+    if (!(target instanceof Element) || !target.closest('[data-u-comp="slide-tab-item"]')) {
+      return
+    }
+
     event.preventDefault()
-    event.stopPropagation()
+    event.stopImmediatePropagation()
   }
 
   private resolveContainer(): HTMLElement | null {
-    const configuredContainer =
-      this.configService.getConfig<IUniverUIConfig>(UI_PLUGIN_CONFIG_KEY)?.container
+    const configuredContainer = this.configService.getConfig<IUniverUIConfig>(
+      UI_PLUGIN_CONFIG_KEY
+    )?.container
 
     if (typeof configuredContainer === 'string') {
       return document.querySelector<HTMLElement>(configuredContainer)

@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { useLatestQuery } from '@/hooks/web/useQueryScope'
-const canvasQuery = useLatestQuery('canvas-load')
 import {
   computed,
   nextTick,
@@ -79,7 +77,6 @@ const {
   dvInfo
 } = storeToRefs(dvMainStore)
 const dataInitState = ref(false)
-const templateLoadError = ref(false)
 const appStore = useAppStoreWithOut()
 const isDataEaseBi = computed(() => appStore.getIsDataEaseBi)
 const { t } = useI18n()
@@ -211,7 +208,7 @@ const initLocalCanvasData = callBack => {
   const busiFlag = opt === 'copy' ? 'dashboard-copy' : 'dashboard'
   initCanvasData(
     resourceId,
-    { busiFlag, resourceTable: 'snapshot', source: 'main-edit', queryRequest: canvasQuery.start() },
+    { busiFlag, resourceTable: 'snapshot', source: 'main-edit' },
     function () {
       dataInitState.value = true
       if (dvInfo.value && opt === 'copy') {
@@ -293,18 +290,11 @@ onMounted(async () => {
     let deTemplateData
     let preName
     if (createType === 'template') {
-      try {
-        const templateParamsApply = JSON.parse(
-          Base64.decode(decodeURIComponent(templateParams + ''))
-        )
-        await decompressionPre(templateParamsApply, result => {
-          deTemplateData = result
-          preName = deTemplateData.baseInfo?.preName
-        })
-      } catch {
-        templateLoadError.value = true
-        return
-      }
+      const templateParamsApply = JSON.parse(Base64.decode(decodeURIComponent(templateParams + '')))
+      await decompressionPre(templateParamsApply, result => {
+        deTemplateData = result
+        preName = deTemplateData.baseInfo?.preName
+      })
     }
     nextTick(() => {
       dvMainStore.createInit('dashboard', null, pid, watermarkBaseInfo, preName)
@@ -391,12 +381,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <el-empty v-if="templateLoadError" :description="t('visualization.template_load_failed')" />
   <div
     class="dv-common-layout dv-teleport-query"
     :class="isDataEaseBi && !newWindowFromDiv && 'dataease-w-h'"
     v-loading="pageLoading"
-    v-if="loadFinish && !mobileConfig && !templateLoadError"
+    v-if="loadFinish && !mobileConfig"
   >
     <DbToolbar @recoverToPublished="doRecoverToPublished" />
     <el-container
@@ -474,7 +463,7 @@ onUnmounted(() => {
   </div>
   <MobileConfigPanel
     @pcMode="mobileConfig = false"
-    v-else-if="loadFinish && mobileConfig && !templateLoadError"
+    v-else-if="loadFinish && mobileConfig"
   ></MobileConfigPanel>
   <NewWindowHandler
     v-if="appStore.getXpackValid"

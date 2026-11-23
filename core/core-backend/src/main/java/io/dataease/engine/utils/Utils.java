@@ -613,14 +613,7 @@ public class Utils {
     }
 
     public static String transValue(String value) {
-        return transValue(value, true);
-    }
-
-    public static String transValue(String value, boolean backslashEscapes) {
-        if (backslashEscapes) {
-            return value.replace("\\", "\\\\").replace("'", "''").replace("\n", "\\n");
-        }
-        return value.replace("'", "''");
+        return value.replace("\\", "\\\\").replace("'", "''").replace("\n", "\\n");
     }
 
     /**

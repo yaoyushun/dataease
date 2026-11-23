@@ -1271,7 +1271,7 @@ public class CalciteProvider extends Provider {
         return rootSchema;
     }
 
-    private void buildSchema(DatasourceSchemaDTO ds, SchemaPlus rootSchema) throws Exception {
+    private synchronized void buildSchema(DatasourceSchemaDTO ds, SchemaPlus rootSchema) throws Exception {
         BasicDataSource dataSource = new BasicDataSource();
         dataSource.setMaxWaitMillis(5 * 1000);
         dataSource.setTestWhileIdle(true);
@@ -2113,7 +2113,7 @@ public class CalciteProvider extends Provider {
             } else {
                 commonThreadPool.addTask(() -> {
                     try {
-                        connection = initConnection(dsMap);
+                        initConnection(dsMap);
                     } catch (Exception ignore) {
                     }
                 });
@@ -2195,13 +2195,6 @@ public class CalciteProvider extends Provider {
                 }
             }
         }
-        return connection;
-    }
-
-    @Override
-    public ConnectionObj getWriteConnection(DatasourceDTO datasource) throws Exception {
-        ConnectionObj connection = new ConnectionObj();
-        connection.setConnection(getConnectionFromPool(datasource.getId()));
         return connection;
     }
 

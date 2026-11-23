@@ -1,4 +1,3 @@
-import type { QueryRequest } from '@/config/axios/queryScope'
 import request from '@/config/axios'
 import { originNameHandleWithArr, originNameHandleBackWithArr } from '@/utils/CalculateFields'
 import { cloneDeep } from 'lodash-es'
@@ -78,8 +77,14 @@ export const deleteChartField = async (id): Promise<IResponse> => {
   })
 }
 
+export const deleteChartFieldByChartId = async (chartId): Promise<IResponse> => {
+  return request.post({ url: `/chart/deleteFieldByChart/${chartId}`, data: {} }).then(res => {
+    return res?.data
+  })
+}
+
 // 通过图表对象获取数据
-export const getData = async (data, queryRequest?: QueryRequest): Promise<IResponse> => {
+export const getData = async (data): Promise<IResponse> => {
   delete data.data
   const copyData = cloneDeep(data)
   // K线图查询时先按横轴降序取最新数据，渲染阶段再恢复升序
@@ -99,7 +104,7 @@ export const getData = async (data, queryRequest?: QueryRequest): Promise<IRespo
   ]
   const dataFields = ['fields', 'sourceFields']
   originNameHandleWithArr(copyData, fields)
-  return request.post({ url: '/chartData/getData', data: copyData, queryRequest }).then(res => {
+  return request.post({ url: '/chartData/getData', data: copyData }).then(res => {
     if (res.code === 0) {
       originNameHandleBackWithArr(res?.data, fields)
       // 动态计算字段在数据中，也需要转码
@@ -145,6 +150,14 @@ export const getChart = async (id): Promise<IResponse> => {
   })
 }
 
+// 单个图表保存测试
+export const saveChart = async (data): Promise<IResponse> => {
+  delete data.data
+  return request.post({ url: '/chart/save', data }).then(res => {
+    return res?.data
+  })
+}
+
 // 获取单个字段枚举值
 export const getFieldData = async ({ fieldId, fieldType, data }): Promise<IResponse> => {
   delete data.data
@@ -159,6 +172,12 @@ export const getFieldData = async ({ fieldId, fieldType, data }): Promise<IRespo
 export const getDrillFieldData = async ({ fieldId, data }): Promise<IResponse> => {
   delete data.data
   return request.post({ url: `/chartData/getDrillFieldData/${fieldId}`, data }).then(res => {
+    return res
+  })
+}
+
+export const getChartDetail = async (id: string): Promise<IResponse> => {
+  return request.post({ url: `chart/getDetail/${id}`, data: {} }).then(res => {
     return res
   })
 }

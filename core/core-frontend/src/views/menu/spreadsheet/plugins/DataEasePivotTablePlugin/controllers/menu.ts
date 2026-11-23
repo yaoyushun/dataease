@@ -6,8 +6,8 @@ export function InsertPivotTableMenuFactory(): IMenuButtonItem<string> {
   return {
     id: InsertPivotTableOperation.id,
     type: MenuItemType.BUTTON,
-    title: 'dataease-spreadsheet.menu.pivotTable',
+    title: '透视表',
     icon: 'TableIcon',
-    tooltip: 'dataease-spreadsheet.menu.insertPivotTable'
+    tooltip: '插入透视表'
   }
 }

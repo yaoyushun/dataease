@@ -31,7 +31,6 @@ import { fieldType as fieldTypeLowercase } from '@/utils/attr'
 const { t } = useI18n()
 export interface Param {
   editType: number
-  copySourceId?: string | number
   pid?: string
   type?: string
   id?: string
@@ -422,7 +421,6 @@ const loadData = () => {
       const request = JSON.parse(JSON.stringify(form.value.configuration))
       request.userName = Base64.encode(request.userName)
       request.passwd = Base64.encode(request.passwd)
-      request.copySourceId = form.value.copySourceId
       request.datasourceId = form.value.id || 0
       request.editType = form.value.editType
       loading.value = true
@@ -659,7 +657,6 @@ const saveExcelDs = (params, successCb, finallyCb) => {
       editType: props.form.editType ? props.form.editType : 0
     }
   }
-  table.copySourceId = form.value.copySourceId
   table.syncSetting = form.value.syncSetting
   if (props.form.editType === 0 && props.form.id && (effectExtField || changeFiled)) {
     ElMessageBox.confirm(t('deDataset.replace_the_data'), {
@@ -807,8 +804,6 @@ defineExpose({
         </el-form-item>
         <el-form-item :label="t('datasource.password')" v-show="activeStep !== 2">
           <CustomPassword
-            :reveal-resource-id="form.id"
-            reveal-secret-type="DATASOURCE_REMOTE_PASSWORD"
             :placeholder="t('common.inputText') + t('common.empty') + t('datasource.password')"
             show-password
             type="password"

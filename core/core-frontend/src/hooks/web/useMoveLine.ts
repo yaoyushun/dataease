@@ -6,66 +6,43 @@ type Sidebar = 'DATASET' | 'DASHBOARD' | 'DATASOURCE' | 'DATA-FILLING' | 'SPREAD
 
 export const useMoveLine = (type: Sidebar) => {
   const { wsCache } = useCache('localStorage')
-  const { emitter } = useEmitt()
   const width = ref(wsCache.get(type) || 280)
   wsCache.set('current-collapse_bar', width.value)
-  let dragging = false
-  let frameId: number | null = null
-  let pendingWidth: number | null = null
-  let previousUserSelect = ''
 
   const getCoordinates = () => {
-    if (dragging) return
-    dragging = true
-    ele.classList.add('dragging')
+    if (document.querySelector('.sidebar-move-line')) {
+      document.querySelector('.sidebar-move-line').className = 'sidebar-move-line dragging'
+    }
     document.addEventListener('mousemove', setCoordinates)
     document.addEventListener('mouseup', cancelEvent)
-    previousUserSelect = document.body.style.userSelect
-    document.body.style.userSelect = 'none'
+    document.querySelector('body').style['user-select'] = 'none'
   }
 
-  const updateWidth = () => {
-    frameId = null
-    if (pendingWidth === null) return
-    const nextWidth = pendingWidth
-    pendingWidth = null
-    if (width.value === nextWidth) return
-    width.value = nextWidth
-    ele.style.left = width.value - 5 + 'px'
-    emitter.emit('current-collapse_bar', width.value)
+  const setCollapseBarWidth = () => {
+    wsCache.set('current-collapse_bar', width.value)
+    useEmitt().emitter.emit('current-collapse_bar')
   }
 
   const setCoordinates = (e: MouseEvent) => {
-    pendingWidth = Math.max(Math.min(401, e.clientX), 279)
-    if (frameId === null) {
-      frameId = requestAnimationFrame(updateWidth)
+    const x = e.clientX
+    if (x > 401 || x < 279) {
+      width.value = Math.max(Math.min(401, x), 279)
+      ele.style.left = width.value - 5 + 'px'
+      setCollapseBarWidth()
+      return
     }
-  }
-
-  const clearDrag = () => {
-    if (frameId !== null) {
-      cancelAnimationFrame(frameId)
-      frameId = null
-    }
-    pendingWidth = null
-    document.removeEventListener('mousemove', setCoordinates)
-    document.removeEventListener('mouseup', cancelEvent)
-    if (dragging) {
-      dragging = false
-      ele.classList.remove('dragging')
-      document.body.style.userSelect = previousUserSelect
-    }
+    ele.style.left = width.value - 5 + 'px'
+    width.value = x
+    setCollapseBarWidth()
   }
 
   const cancelEvent = () => {
-    if (!dragging) return
-    if (frameId !== null) {
-      cancelAnimationFrame(frameId)
+    if (document.querySelector('.sidebar-move-line')) {
+      document.querySelector('.sidebar-move-line').className = 'sidebar-move-line'
     }
-    updateWidth()
-    clearDrag()
-    wsCache.set('current-collapse_bar', width.value)
+    document.querySelector('body').style['user-select'] = 'auto'
     wsCache.set(type, width.value)
+    document.removeEventListener('mousemove', setCoordinates)
   }
 
   const node = ref()
@@ -81,9 +58,10 @@ export const useMoveLine = (type: Sidebar) => {
   })
 
   onBeforeUnmount(() => {
-    clearDrag()
+    cancelEvent()
     ele.removeEventListener('mousedown', getCoordinates)
-    ele.remove()
+    ;(node.value?.$el || node.value)?.removeChild?.(ele)
+    width.value = null
   })
 
   return {

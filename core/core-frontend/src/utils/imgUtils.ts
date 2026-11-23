@@ -1,6 +1,4 @@
-import { collectChartRuntimeCaches, getCanvasRuntime } from '@/hooks/web/useChartRuntimeCache'
 import { withMapPictures } from './mapExport'
-import { prepareViewportChartsForExport } from '@/hooks/web/useChartViewportLoad'
 import html2canvas from 'html2canvas'
 import JsPDF from 'jspdf'
 import { dvMainStoreWithOut } from '@/store/modules/data-visualization/dvMain'
@@ -29,13 +27,8 @@ export function imgUrlTrans(url: string) {
   return authenticatedImageUrl(formatterUrl(url.replace('com//', 'com/')))
 }
 
-function prePareTemplateBaseData(dvId, callback, context?) {
-  const current = context || {
-    dvInfo: dvInfo.value,
-    canvasStyleData: canvasStyleData.value,
-    componentData: componentData.value
-  }
-  if (current.dvInfo.type === 'dataV' && current.canvasStyleData.screenAdaptor === 'full') {
+function prePareTemplateBaseData(dvId, callback) {
+  if (dvInfo.value.type === 'dataV' && canvasStyleData.value.screenAdaptor === 'full') {
     initCanvasDataPrepare(
       dvId,
       { busiFlag: 'dataV', resourceTable: 'core' },
@@ -48,65 +41,40 @@ function prePareTemplateBaseData(dvId, callback, context?) {
     )
   } else {
     callback({
-      canvasDataResult: JSON.stringify(current.componentData),
-      canvasStyleResult: JSON.stringify(current.canvasStyleData)
+      canvasDataResult: JSON.stringify(componentData.value),
+      canvasStyleResult: JSON.stringify(canvasStyleData.value)
     })
   }
 }
 
 export async function download2AppTemplate(downloadType, canvasDom, name, attachParams, callBack?) {
+  const canvasViewDataTemplate = deepCopy(canvasViewInfo.value)
+  Object.keys(canvasViewDataTemplate).forEach(viewId => {
+    canvasViewDataTemplate[viewId].data = deepCopy(canvasViewDataInfo.value[viewId])
+  })
+  const missingDataId = Object.keys(canvasViewDataTemplate).find(viewId => {
+    const view = canvasViewDataTemplate[viewId]
+    const needsData =
+      view.type !== 'VQuery' &&
+      (view.tableId ||
+        (view['dataFrom'] === 'template' && !['rich-text', 'picture-group'].includes(view.type)))
+    return needsData && view.data == null
+  })
+  if (missingDataId) {
+    const { t } = useI18n()
+    ElMessage.warning(
+      t('visualization.template_data_not_ready', [
+        canvasViewDataTemplate[missingDataId].title || missingDataId
+      ])
+    )
+    callBack?.()
+    return
+  }
   try {
-    await prepareViewportChartsForExport(canvasDom)
-    const localCanvas = getCanvasRuntime(canvasDom)
-    const localCharts = collectChartRuntimeCaches(canvasDom)
-    const canvasViewDataTemplate = deepCopy(localCanvas?.canvasViewInfo || canvasViewInfo.value)
-    Object.keys(canvasViewDataTemplate).forEach(viewId => {
-      const cache = localCharts.find(cache => cache.view?.id === viewId)
-      // 有运行时上下文时不回退另一个画布的共享缓存；缺数据仍由既有校验提示。
-      canvasViewDataTemplate[viewId].data = deepCopy(
-        cache && !cache.legacy
-          ? cache.data
-          : cache?.legacy || !localCanvas
-          ? canvasViewDataInfo.value[viewId]
-          : undefined
-      )
-    })
-    const missingDataId = Object.keys(canvasViewDataTemplate).find(viewId => {
-      const view = canvasViewDataTemplate[viewId]
-      const needsData =
-        view.type !== 'VQuery' &&
-        (view.tableId ||
-          (view['dataFrom'] === 'template' && !['rich-text', 'picture-group'].includes(view.type)))
-      return needsData && view.data == null
-    })
-    if (missingDataId) {
-      const { t } = useI18n()
-      ElMessage.warning(
-        t('visualization.template_data_not_ready', [
-          canvasViewDataTemplate[missingDataId].title || missingDataId
-        ])
-      )
-      return
-    }
     const { canvasDataResult, canvasStyleResult } = await new Promise<{
       canvasDataResult: string
       canvasStyleResult: string
-    }>(resolve => {
-      if (
-        localCanvas &&
-        !(
-          localCanvas.dvInfo.type === 'dataV' &&
-          localCanvas.canvasStyleData.screenAdaptor === 'full'
-        )
-      ) {
-        resolve({
-          canvasDataResult: JSON.stringify(localCanvas.componentData),
-          canvasStyleResult: JSON.stringify(localCanvas.canvasStyleData)
-        })
-      } else {
-        prePareTemplateBaseData(localCanvas?.dvInfo.id || dvInfo.value.id, resolve, localCanvas)
-      }
-    })
+    }>(resolve => prePareTemplateBaseData(dvInfo.value.id, resolve))
     const materialBundle = useAppStoreWithOut().getXpackValid
       ? (await exportMaterialBundle(canvasStyleResult, canvasDataResult)).data
       : null
@@ -129,7 +97,7 @@ export async function download2AppTemplate(downloadType, canvasDom, name, attach
       name: templateName,
       templateType: 'self',
       snapshot: dataUrl,
-      dvType: localCanvas?.dvInfo.type || dvInfo.value.type,
+      dvType: dvInfo.value.type,
       nodeType: downloadType,
       version: 3,
       canvasStyleData: remapMaterialDocument(canvasStyleResult, materialBundle?.referenceMap),
@@ -158,8 +126,7 @@ export async function download2AppTemplate(downloadType, canvasDom, name, attach
 
 export function downloadCanvas(type, canvasDom, name, callBack?) {
   if (canvasDom) {
-    prepareViewportChartsForExport(canvasDom)
-      .then(() => waitForResourceImages(canvasDom))
+    waitForResourceImages(canvasDom)
       .then(() => html2canvas(canvasDom))
       .then(canvas => {
         const dom = document.body.appendChild(canvas)
@@ -186,7 +153,6 @@ export function downloadCanvas(type, canvasDom, name, callBack?) {
         }
       })
       .catch(error => {
-        ElMessage.error(useI18n().t('material.export_failed'))
         console.error('oops, something went wrong!', error)
         if (callBack) {
           callBack()
@@ -196,18 +162,15 @@ export function downloadCanvas(type, canvasDom, name, callBack?) {
 }
 
 export function downloadCanvas2(type, canvasDom, name, callBack?) {
-  prepareViewportChartsForExport(canvasDom)
-    .then(() =>
-      withMapPictures(canvasDom, async () => {
-        await waitForResourceImages(canvasDom)
-        return domToPng(canvasDom, {
-          width: canvasDom.offsetWidth,
-          height: canvasDom.offsetHeight,
-          // 按 2 倍(或更高)分辨率渲染,解决导出图片模糊问题
-          scale: Math.max(3, window.devicePixelRatio || 1)
-        })
-      })
-    )
+  withMapPictures(canvasDom, async () => {
+    await waitForResourceImages(canvasDom)
+    return domToPng(canvasDom, {
+      width: canvasDom.offsetWidth,
+      height: canvasDom.offsetHeight,
+      // 按 2 倍(或更高)分辨率渲染,解决导出图片模糊问题
+      scale: Math.max(3, window.devicePixelRatio || 1)
+    })
+  })
     .then(dataUrl => {
       if (type === 'img') {
         const a = document.createElement('a')
@@ -229,7 +192,6 @@ export function downloadCanvas2(type, canvasDom, name, callBack?) {
       }
     })
     .catch(error => {
-      ElMessage.error(useI18n().t('material.export_failed'))
       if (callBack) {
         callBack()
       }

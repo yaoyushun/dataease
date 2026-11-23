@@ -127,7 +127,7 @@ const resize = () => {
   }
 
   const renderManager = univerInstance.univer.__getInjector().get(IRenderManagerService)
-  renderManager.getRenderUnitById(workbook.getId())?.engine.resize()
+  renderManager.getRenderById(workbook.getId())?.engine.resize()
 }
 
 /**

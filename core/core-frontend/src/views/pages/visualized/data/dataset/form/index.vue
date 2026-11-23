@@ -3,8 +3,6 @@ import dvFolder from '@/assets/svg/dv-folder.svg'
 import icon_left_outlined from '@/assets/svg/icon_left_outlined.svg'
 import icon_right_outlined from '@/assets/svg/icon_right_outlined.svg'
 import referenceTable from '@/assets/svg/reference-table.svg'
-import dvParams from '@/assets/svg/dv-params.svg'
-import dvFilter from '@/assets/svg/dv-filter.svg'
 import icon_organization_outlined from '@/assets/svg/icon_organization_outlined.svg'
 import icon_searchOutline_outlined from '@/assets/svg/icon_search-outline_outlined.svg'
 import icon_sql_outlined_1 from '@/assets/svg/icon_sql_outlined_1.svg'
@@ -59,15 +57,10 @@ import {
   getFieldName,
   timeTypes,
   num,
-  type DataSource,
-  type Node as DatasetNode,
-  type Field as DatasetField
+  type DataSource
 } from '@/views/visualized/data/dataset/form/util'
 import { fieldType } from '@/utils/attr'
-import { provideQueryScope, useLatestQuery } from '@/hooks/web/useQueryScope'
-
-provideQueryScope()
-const previewQuery = useLatestQuery('dataset-preview')
+import { cancelMap } from '@/config/axios/service'
 import { useEmbedded } from '@/store/modules/embedded'
 import { useAppStoreWithOut } from '@/store/modules/app'
 import {
@@ -80,9 +73,6 @@ import {
 } from '@/api/dataset'
 import type { Table } from '@/api/dataset'
 import DatasetUnion from '@/views/visualized/data/dataset/form/DatasetUnion.vue'
-import DatasetTableDetails from '@/views/visualized/data/dataset/form/DatasetTableDetails.vue'
-import DatasetNodeDetails from '@/views/visualized/data/dataset/form/DatasetNodeDetails.vue'
-import DatasetPanelFullscreen from '@/views/visualized/data/dataset/form/DatasetPanelFullscreen.vue'
 import { cloneDeep, debounce } from 'lodash-es'
 import { iconFieldMap } from '@/components/icon-group/field-list'
 import { iconDatasourceMap } from '@/components/icon-group/datasource-list'
@@ -123,47 +113,7 @@ const editUnion = ref(false)
 const datasetDrag = ref()
 const datasetName = ref(t('data_set.unnamed_dataset'))
 const tabActive = ref('preview')
-const editorStep = ref<'relation' | 'process'>('relation')
-const expandedPanel = ref<'canvas' | 'details' | null>(null)
-const toggleExpandedPanel = (panel: 'canvas' | 'details') => {
-  expandedPanel.value = expandedPanel.value === panel ? null : panel
-}
-const nodeDetails = ref<InstanceType<typeof DatasetNodeDetails>>()
-const canvasNodes = computed<DatasetNode[]>(() => datasetDrag.value?.getNodeList() || [])
-const applyNodeFields = (node: DatasetNode, fields: DatasetField[]) =>
-  datasetDrag.value.applyNodeFields(node, fields)
-const selectCanvasNode = (id: string) => nodeDetails.value?.selectNode(id)
-const activateCanvasNode = (id: string) => datasetDrag.value?.setActiveNode(id)
-const handleNodeCommand = (node: DatasetNode, command: string) =>
-  datasetDrag.value?.handleCommand(node, command)
-const changeNodeFieldName = (id: string, value: string) => {
-  const field = allfields.value.find(field => field.id === id)
-  if (!field) return
-  field.name = value
-  changeUpdate()
-}
-const changeNodeFieldType = (id: string, value: (number | string)[]) => {
-  const field = allfields.value.find(field => field.id === id)
-  if (!field) return
-  field.deTypeArr = [...value]
-  cascaderChange(field, value)
-  changeUpdate()
-}
-const changeEditorStep = async (step: 'relation' | 'process') => {
-  if (step === 'process' && !(await nodeDetails.value?.commit())) return
-  if (step === 'relation') {
-    ++datasetPreviewRequest
-    previewQuery.invalidate()
-    datasetPreviewLoading.value = false
-  }
-  expandedPanel.value = null
-  editorStep.value = step
-  await nextTick()
-  quotaTableHeight.value =
-    (step === 'process' ? document.documentElement.clientHeight - 56 : sqlResultHeight.value) - 242
-  if (step === 'process' && allfields.value.length) datasetPreview()
-}
-const tableDetails = ref<InstanceType<typeof DatasetTableDetails>>()
+const activeName = ref('')
 const dataSource = ref('')
 const searchTable = ref('')
 const showInput = ref(false)
@@ -310,17 +260,6 @@ const dfsName = (arr, id) => {
 }
 
 const { height } = useWindowSize()
-const canvasHeight = computed(() =>
-  expandedPanel.value === 'canvas'
-    ? Math.max(64, height.value - 56 - (crossDatasources.value ? 40 : 0))
-    : dragHeight.value
-)
-const detailsHeight = computed(
-  () =>
-    `calc(100% - ${
-      (expandedPanel.value === 'details' ? 0 : dragHeight.value) + (crossDatasources.value ? 40 : 0)
-    }px)`
-)
 
 const dfsChild = arr => {
   return arr.filter(ele => {
@@ -359,7 +298,7 @@ const pushDataset = () => {
 }
 
 const backToMain = () => {
-  if (isUpdate || nodeDetails.value?.hasPendingChanges) {
+  if (isUpdate) {
     ElMessageBox.confirm(t('data_set.want_to_exit'), {
       confirmButtonText: t('dataset.confirm'),
       cancelButtonText: t('common.cancel'),
@@ -368,10 +307,9 @@ const backToMain = () => {
       type: 'warning',
       autofocus: false,
       showClose: false
-    }).then(
-      () => pushDataset(),
-      () => undefined
-    )
+    }).then(() => {
+      pushDataset()
+    })
   } else {
     pushDataset()
   }
@@ -834,11 +772,6 @@ const initEdite = async () => {
     dataSource.value = fir?.currentDs?.datasourceId
     dsChange(dataSource.value)
     datasetDrag.value.initState(arr)
-    if (id && !copyId) {
-      editorStep.value = 'process'
-      await nextTick()
-      if (allfields.value.length) datasetPreview()
-    }
     loading.value = false
   } catch (error) {
     console.error(error)
@@ -898,8 +831,7 @@ const addComplete = () => {
     columns.value = []
     tableData.value = []
   }
-  ++datasetPreviewRequest
-  previewQuery.invalidate()
+  cancelMap['/datasetData/previewData']?.()
   datasetPreviewLoading.value = false
   reGetName()
 }
@@ -955,11 +887,11 @@ const setGuid = (arr, id, datasourceId, oldArr) => {
 
 const dfsFields = (arr, list) => {
   list.forEach(ele => {
-    const { currentDsFields } = ele
-    arr.push(...cloneDeep(currentDsFields))
     if (ele.children?.length) {
       dfsFields(arr, ele.children)
     }
+    const { currentDsFields } = ele
+    arr.push(...cloneDeep(currentDsFields))
   })
 }
 
@@ -974,10 +906,13 @@ const getDelIdArr = (newArr, oldArr) => {
 }
 
 const diffArr = (newArr, oldArr) => {
-  const oldFields = new Map(oldArr.map(ele => [ele.id, ele]))
+  const idMapNew = newArr.map(ele => ele.id)
+  const idMapOld = oldArr.map(ele => ele.id)
+  const arr = newArr.filter(ele => !idMapOld.includes(ele.id))
   return cloneDeep([
     ...oldArr.filter(ele => [2, 3].includes(ele.extField)),
-    ...newArr.map(ele => oldFields.get(ele.id) || ele)
+    ...arr,
+    ...oldArr.filter(ele => idMapNew.includes(ele.id))
   ])
 }
 
@@ -1319,9 +1254,9 @@ const dragstart = (e: DragEvent, ele) => {
   e.dataTransfer.setData('text/plain', JSON.stringify(ele))
   maskShow.value = true
 }
-const openTableDetails = (data: Table) => {
+const setActiveName = (data: Table) => {
   if (data.unableCheck) return
-  if (data.type !== 'sql') tableDetails.value?.open(data)
+  activeName.value = data.tableName
 }
 
 const verify = () => {
@@ -1348,15 +1283,11 @@ const verify = () => {
       const arr = []
       dfsNodeList(arr, datasetDrag.value.getNodeList())
       datasetPreviewLoading.value = true
-      const query = previewQuery.start()
-      getPreviewData({ union: arr, allFields: allfieldsCopy, isCross: isCross.value }, query)
+      getPreviewData({ union: arr, allFields: allfieldsCopy, isCross: isCross.value })
         .then(() => {
-          if (query.isCurrent()) ElMessage.success(t('data_set.validation_succeeded'))
+          ElMessage.success(t('data_set.validation_succeeded'))
         })
-        .catch(() => undefined)
         .finally(() => {
-          query.finish()
-          if (!query.isCurrent()) return
           datasetPreviewLoading.value = false
         })
     }
@@ -1422,8 +1353,6 @@ const handleResize = debounce(() => {
     return
   }
   dragHeight.value = clientHeight - sqlResultHeight.value - 56
-  quotaTableHeight.value =
-    (editorStep.value === 'process' ? clientHeight - 56 : sqlResultHeight.value) - 242
 }, 60)
 let willBack = false
 const saveAndBack = () => {
@@ -1443,10 +1372,7 @@ onMounted(async () => {
   window.addEventListener('resize', handleResize)
   getSingleVal()
   getSqlResultHeight()
-  quotaTableHeight.value =
-    (editorStep.value === 'process'
-      ? document.documentElement.clientHeight - 56
-      : sqlResultHeight.value) - 242
+  quotaTableHeight.value = sqlResultHeight.value - 242
 })
 
 const getSingleVal = () => {
@@ -1459,7 +1385,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
 })
 const getSqlResultHeight = () => {
-  sqlResultHeight.value = document.documentElement.clientHeight - dragHeight.value - 56
+  sqlResultHeight.value = (document.querySelector('.sql-result') as HTMLElement).offsetHeight
 }
 const getDatasource = (weight?: number) => {
   getDatasourceList(weight).then(res => {
@@ -1541,25 +1467,18 @@ const datasetSaveAndBack = () => {
 }
 
 const datasetPreviewLoading = ref(false)
-let datasetPreviewRequest = 0
 
 const datasetPreview = () => {
   if (datasetPreviewLoading.value) return
   const arr = []
   dfsNodeList(arr, datasetDrag.value.getNodeList())
-  const request = ++datasetPreviewRequest
-  const query = previewQuery.start()
   datasetPreviewLoading.value = true
-  getPreviewData({ union: arr, allFields: allfields.value, isCross: isCross.value }, query)
+  getPreviewData({ union: arr, allFields: allfields.value, isCross: isCross.value })
     .then(res => {
-      if (request !== datasetPreviewRequest || !query.isCurrent()) return
       columns.value = generateColumns((res.data.fields as Field[]) || [])
       tableData.value = (res.data.data as Array<{}>) || []
     })
-    .catch(() => undefined)
     .finally(() => {
-      query.finish()
-      if (request !== datasetPreviewRequest || !query.isCurrent()) return
       datasetPreviewLoading.value = false
     })
 }
@@ -1856,69 +1775,23 @@ const getIconNameCalc = (deType, extField, dimension = false) => {
           }}</span>
         </template>
       </span>
-      <nav v-if="editorStep === 'process'" class="editor-tools">
-        <el-button text @click="changeEditorStep('relation')">
-          <span class="editor-tool-content">
-            <el-icon
-              ><Icon><icon_organization_outlined class="svg-icon" /></Icon
-            ></el-icon>
-            <span>{{ t('dataset.table_relationship') }}</span>
-          </span>
-        </el-button>
-        <el-button text :disabled="!allfields.length" @click="addCalcField('q')">
-          <span class="editor-tool-content">
-            <el-icon
-              ><Icon><dvParams class="svg-icon" /></Icon
-            ></el-icon>
-            <span>{{ t('dataset.add_calc_field') }}</span>
-          </span>
-        </el-button>
-        <el-button text :disabled="!allfields.length" @click="addGroupField">
-          <span class="editor-tool-content">
-            <el-icon
-              ><Icon><dvFilter class="svg-icon" /></Icon
-            ></el-icon>
-            <span>{{ t('dataset.create_grouping_field') }}</span>
-          </span>
-        </el-button>
-      </nav>
       <span class="operate">
-        <el-button
-          v-if="editorStep === 'relation'"
-          type="primary"
-          :disabled="showInput || !allfields.length"
-          @click="changeEditorStep('process')"
-          >{{ t('dataset.next_data_processing') }}</el-button
-        >
-        <el-button
-          v-if="editorStep === 'process'"
-          :disabled="showInput"
-          type="primary"
-          @click="datasetSaveAndBack"
-          >{{ t('data_set.save_and_return') }}</el-button
-        >
-        <el-button
-          v-if="editorStep === 'process'"
-          :disabled="showInput"
-          type="primary"
-          @click="datasetSave"
-          >{{ t('data_set.save') }}</el-button
-        >
+        <el-button :disabled="showInput" type="primary" @click="datasetSaveAndBack">{{
+          t('data_set.save_and_return')
+        }}</el-button>
+        <el-button :disabled="showInput" type="primary" @click="datasetSave">{{
+          t('data_set.save')
+        }}</el-button>
       </span>
     </div>
-    <dataset-table-details ref="tableDetails" />
     <div class="container dataset-db" @mouseup="mouseupDrag">
-      <p
-        v-show="editorStep === 'relation' && !showLeft"
-        class="arrow-right"
-        @click="showLeft = true"
-      >
+      <p v-show="!showLeft" class="arrow-right" @click="showLeft = true">
         <el-icon>
           <Icon><icon_right_outlined class="svg-icon" /></Icon>
         </el-icon>
       </p>
       <div
-        v-show="editorStep === 'relation' && showLeft"
+        v-show="showLeft"
         :style="{ left: LeftWidth + 'px' }"
         class="drag-left"
         :class="isDragging && 'is-dragging'"
@@ -1926,7 +1799,7 @@ const getIconNameCalc = (deType, extField, dimension = false) => {
       />
       <div
         v-loading="dsLoading"
-        v-show="editorStep === 'relation' && showLeft"
+        v-show="showLeft"
         class="table-list"
         :style="{ width: LeftWidth + 'px' }"
       >
@@ -2020,6 +1893,7 @@ const getIconNameCalc = (deType, extField, dimension = false) => {
             @dragstart="$event => dragstart($event, sqlNode)"
             @dragend="dragEnd"
             :draggable="true"
+            @click="setActiveName(sqlNode)"
           >
             <el-icon class="icon-color">
               <Icon name="icon_sql_outlined_1"><icon_sql_outlined_1 class="svg-icon" /></Icon>
@@ -2050,7 +1924,7 @@ const getIconNameCalc = (deType, extField, dimension = false) => {
                     currentDsId &&
                     datasourceTableData[index].datasourceId === currentDsId)
                 "
-                @click="openTableDetails(datasourceTableData[index])"
+                @click="setActiveName(datasourceTableData[index])"
               >
                 <el-icon class="icon-color">
                   <Icon name="reference-table"><referenceTable class="svg-icon" /></Icon>
@@ -2061,68 +1935,53 @@ const getIconNameCalc = (deType, extField, dimension = false) => {
           </FixedSizeList>
         </div>
       </div>
-      <div
-        class="drag-right"
-        :style="{
-          width: `calc(100vw - ${editorStep === 'relation' && showLeft ? LeftWidth : 0}px)`
-        }"
-      >
-        <div v-if="crossDatasources && editorStep === 'relation'" class="different-datasource">
+      <div class="drag-right" :style="{ width: `calc(100vw - ${showLeft ? LeftWidth : 0}px)` }">
+        <div v-if="crossDatasources" class="different-datasource">
           <el-icon>
             <Icon name="icon_warning_colorful"><icon_warning_colorful class="svg-icon" /></Icon>
           </el-icon>
           {{ t('data_set.be_reported_incorrectly') }}
         </div>
+        <dataset-union
+          @reGetName="reGetName"
+          @join-editor="joinEditor"
+          @changeUpdate="changeUpdate"
+          :maskShow="maskShow"
+          :dragHeight="dragHeight"
+          :getDsName="getDsName"
+          :offsetX="offsetX"
+          :offsetY="offsetY"
+          ref="datasetDrag"
+          @updateAllfields="updateAllfields"
+          @addComplete="addComplete"
+        ></dataset-union>
         <div
-          v-show="editorStep === 'relation' && expandedPanel !== 'details'"
-          class="dataset-canvas-region"
+          class="sql-result"
+          :style="{
+            height: sqlResultHeight
+              ? `${crossDatasources ? sqlResultHeight - 40 : sqlResultHeight}px`
+              : `calc(100% - ${crossDatasources ? dragHeight + 40 : dragHeight}px)`
+          }"
         >
-          <dataset-panel-fullscreen
-            class="canvas-fullscreen"
-            :fullscreen="expandedPanel === 'canvas'"
-            :label="t('dataset.canvas_fullscreen')"
-            @toggle="toggleExpandedPanel('canvas')"
-          />
-          <dataset-union
-            @select-node="selectCanvasNode"
-            @reGetName="reGetName"
-            @join-editor="joinEditor"
-            @changeUpdate="changeUpdate"
-            :maskShow="maskShow"
-            :dragHeight="canvasHeight"
-            :getDsName="getDsName"
-            :offsetX="offsetX"
-            :offsetY="offsetY"
-            ref="datasetDrag"
-            @updateAllfields="updateAllfields"
-            @addComplete="addComplete"
-          ></dataset-union>
-        </div>
-        <div
-          v-show="editorStep === 'relation' && expandedPanel !== 'canvas'"
-          class="node-details-region"
-          :style="{ height: detailsHeight }"
-        >
-          <span v-show="!expandedPanel" class="drag" @mousedown="mousedownDragH" />
-          <dataset-node-details
-            ref="nodeDetails"
-            :nodes="canvasNodes"
-            :is-cross="isCross"
-            :apply-fields="applyNodeFields"
-            :all-fields="allfields"
-            :field-options="fieldOptions"
-            :field-options-text="fieldOptionsText"
-            @field-name="changeNodeFieldName"
-            @field-type="changeNodeFieldType"
-            :fullscreen="expandedPanel === 'details'"
-            @toggle-fullscreen="toggleExpandedPanel('details')"
-            @select="activateCanvasNode"
-            @command="handleNodeCommand"
-          />
-        </div>
-        <div v-show="editorStep === 'process'" class="sql-result" style="height: 100%">
           <div class="sql-title">
+            <span class="drag" @mousedown="mousedownDragH" />
             <div class="field-data">
+              <el-button :disabled="!allfields.length" @click="addCalcField('q')" secondary>
+                <template #icon>
+                  <el-icon>
+                    <Icon name="icon_add_outlined"><icon_add_outlined class="svg-icon" /></Icon>
+                  </el-icon>
+                </template>
+                {{ t('dataset.add_calc_field') }}
+              </el-button>
+              <el-button :disabled="!allfields.length" @click="addGroupField" secondary>
+                <template #icon>
+                  <el-icon>
+                    <Icon><icon_organization_outlined class="svg-icon" /></Icon>
+                  </el-icon>
+                </template>
+                {{ t('dataset.create_grouping_field') }}
+              </el-button>
               <el-button
                 style="min-width: 70px"
                 :disabled="!allfields.length"
@@ -3075,53 +2934,12 @@ const getIconNameCalc = (deType, extField, dimension = false) => {
   --ed-border-color-lighter: #1f232926 !important;
   .top {
     height: 56px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    display: flex;
     align-items: center;
-    gap: 16px;
+    justify-content: space-between;
     padding: 0 24px;
     background: #050e21;
     box-shadow: 0px 2px 4px 0px rgba(31, 35, 41, 0.12);
-
-    .operate {
-      grid-column: 3;
-      justify-self: end;
-      white-space: nowrap;
-    }
-
-    .editor-tools {
-      display: flex;
-      align-items: center;
-      gap: 24px;
-
-      .editor-tool-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 4px;
-      }
-
-      .ed-button {
-        height: 48px;
-        margin: 0;
-        color: #fff;
-        padding: 4px 8px;
-        font-size: 12px;
-
-        &:hover {
-          background: #ffffff1a;
-        }
-
-        &.is-disabled {
-          color: #ffffff66;
-        }
-
-        .ed-icon {
-          font-size: 18px;
-          transform: translateY(2px);
-        }
-      }
-    }
 
     .name {
       color: #fff;
@@ -3130,7 +2948,7 @@ const getIconNameCalc = (deType, extField, dimension = false) => {
       font-weight: 400;
       display: flex;
       align-items: center;
-      min-width: 0;
+      width: 50%;
       position: relative;
 
       .ed-form-item__error {
@@ -3330,28 +3148,6 @@ const getIconNameCalc = (deType, extField, dimension = false) => {
         .ed-icon {
           font-size: 16px;
           margin-right: 8px;
-        }
-      }
-      .dataset-canvas-region {
-        position: relative;
-        .canvas-fullscreen {
-          position: absolute;
-          top: 16px;
-          right: 16px;
-          z-index: 5;
-        }
-      }
-      .node-details-region {
-        position: relative;
-        min-height: 0;
-        > .drag {
-          position: absolute;
-          top: -3px;
-          left: 0;
-          width: 100%;
-          height: 6px;
-          cursor: row-resize;
-          z-index: 5;
         }
       }
       .sql-result {

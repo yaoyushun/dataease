@@ -3,7 +3,7 @@ import icon_copy_filled from '@/assets/svg/icon_copy_filled.svg'
 import icon_dataset from '@/assets/svg/icon_dataset.svg'
 import icon_deleteTrash_outlined from '@/assets/svg/icon_delete-trash_outlined.svg'
 import icon_intoItem_outlined from '@/assets/svg/icon_into-item_outlined.svg'
-import { debounce, throttle } from 'lodash-es'
+import { throttle } from 'lodash-es'
 import icon_rename_outlined from '@/assets/svg/icon_rename_outlined.svg'
 import dvNewFolder from '@/assets/svg/dv-new-folder.svg'
 import icon_fileAdd_outlined from '@/assets/svg/icon_file-add_outlined.svg'
@@ -27,7 +27,6 @@ import {
   computed,
   watch,
   onBeforeMount,
-  onBeforeUnmount,
   nextTick,
   unref,
   h,
@@ -376,63 +375,22 @@ const columns = shallowRef([])
 const tableData = shallowRef([])
 const total = ref(null)
 
-const selectionLoading = ref(false)
-let selectionSequence = 0
-let selectionController: AbortController | undefined
-let previewController: AbortController | undefined
-let previewPending = false
-let previewLoaded = false
-
-const loadSelectedDataset = debounce((data: BusiTreeNode, sequence: number) => {
-  const controller = new AbortController()
-  selectionController = controller
-  barInfoApi(data.id, controller.signal)
-    .then(res => {
-      if (sequence !== selectionSequence) return
-      const nodeData = res as unknown as Node
-      Object.assign(nodeInfo, nodeData)
-      nodeInfo.weight = data.weight
-      nodeInfo.ext = data.ext || 0
-      selectionLoading.value = false
-      activeName.value = 'dataPreview'
-      handleClick(activeName.value)
-    })
-    .catch(() => {
-      if (sequence !== selectionSequence) return
-      selectionLoading.value = false
-      dataPreviewLoading.value = false
-    })
-}, 150)
-
 const handleNodeClick = (data: BusiTreeNode) => {
   if (!data.leaf) {
     datasetListTree.value.setCurrentKey(null)
     return
   }
-  const sequence = ++selectionSequence
-  selectionController?.abort()
-  previewController?.abort()
-  previewPending = false
-  previewLoaded = false
-  selectionLoading.value = true
-  Object.assign(nodeInfo, defaultNode)
-  columnsPreview = []
-  dataPreview = []
-  allFields = []
-  datasetTableFiled.value = []
-  columns.value = []
-  tableData.value = []
-  total.value = null
-  dataPreviewLoading.value = true
-  loadSelectedDataset(data, sequence)
+  barInfoApi(data.id).then(res => {
+    const nodeData = res as unknown as Node[]
+    Object.assign(nodeInfo, nodeData)
+    nodeInfo.weight = data.weight
+    nodeInfo.ext = data.ext || 0
+    columnsPreview = []
+    dataPreview = []
+    activeName.value = 'dataPreview'
+    handleClick(activeName.value)
+  })
 }
-
-onBeforeUnmount(() => {
-  selectionSequence++
-  loadSelectedDataset.cancel()
-  selectionController?.abort()
-  previewController?.abort()
-})
 
 const exportDataset = () => {
   showExport.value = true
@@ -568,54 +526,31 @@ const createDataset = (data?: BusiTreeNode) => {
 }
 
 const handleClick = (tabName: TabPaneName) => {
-  if (selectionLoading.value || !nodeInfo.id) return
   switch (tabName) {
-    case 'dataPreview': {
-      if (previewLoaded) {
+    case 'dataPreview':
+      if (columnsPreview.length) {
         columns.value = columnsPreview
         tableData.value = dataPreview
         break
       }
-      if (previewPending) break
-      const sequence = selectionSequence
-      const id = nodeInfo.id
-      const controller = new AbortController()
-      previewController = controller
-      previewPending = true
       dataPreviewLoading.value = true
       total.value = null
-      getDatasetPreview(id, controller.signal)
+      getDatasetPreview(nodeInfo.id)
         .then(res => {
-          if (sequence !== selectionSequence) return
           allFields = (res?.allFields as unknown as Field[]) || []
           datasetTableFiled.value = allFields
           columnsPreview = generateColumns((res?.data?.fields as Field[]) || [])
           dataPreview = (res?.data?.data as Array<{}>) || []
-          previewLoaded = true
-          if (activeName.value === 'dataPreview') {
-            columns.value = columnsPreview
-            tableData.value = dataPreview
-          } else if (activeName.value === 'structPreview') {
-            tableData.value = allFields
-          }
-        })
-        .catch(() => {
-          // Request failures are reported by the shared HTTP interceptor.
+          columns.value = columnsPreview
+          tableData.value = dataPreview
         })
         .finally(() => {
-          if (sequence !== selectionSequence) return
-          previewPending = false
           dataPreviewLoading.value = false
         })
-      getDatasetTotal(id, controller.signal)
-        .then(res => {
-          if (sequence === selectionSequence) total.value = res
-        })
-        .catch(() => {
-          // Request failures are reported by the shared HTTP interceptor.
-        })
+      getDatasetTotal(nodeInfo.id).then(res => {
+        total.value = res
+      })
       break
-    }
     case 'structPreview':
       columns.value = allFieldsColumns
       tableData.value = allFields
@@ -1070,12 +1005,6 @@ const proxyAllowDrop = throttle((arg1, arg2) => {
           >
         </empty-background>
       </template>
-      <div
-        v-else-if="selectionLoading"
-        v-loading="selectionLoading"
-        class="dataset-selection-state"
-        aria-busy="true"
-      />
       <template v-else-if="!!nodeInfo.id">
         <div class="dataset-info">
           <div class="info-method">
@@ -1137,7 +1066,10 @@ const proxyAllowDrop = throttle((arg1, arg2) => {
                 :name="ele.name"
               ></el-tab-pane>
             </el-tabs>
-            <Pane v-if="appStore.getXpackValid" @loaded="panelLoad" />
+            <Pane
+              v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
+              @loaded="panelLoad"
+            />
           </div>
         </div>
         <div class="dataset-table-info">
@@ -1210,12 +1142,12 @@ const proxyAllowDrop = throttle((arg1, arg2) => {
           <template v-if="['row', 'column'].includes(activeName)">
             <div class="table-row-column">
               <DatasetRowPermissions
-                v-if="appStore.getXpackValid"
+                v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
                 :active-name="activeName"
                 :dataset-id="nodeInfo.id"
               />
               <DatasetColumnPermissions
-                v-if="appStore.getXpackValid"
+                v-if="appStore.getXpackValid || appStore.getBluewingEnabled"
                 :active-name="activeName"
                 :dataset-id="nodeInfo.id"
               />
@@ -1276,13 +1208,6 @@ const proxyAllowDrop = throttle((arg1, arg2) => {
 </template>
 
 <style lang="less" scoped>
-.dataset-selection-state {
-  min-height: 240px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ed-text-color-secondary);
-}
 @import '@/style/mixin.less';
 
 :deep(.dataset-preview_table) {
@@ -1358,7 +1283,7 @@ const proxyAllowDrop = throttle((arg1, arg2) => {
     height: 100%;
     width: 279px;
     padding: 0;
-    border-right: 1px solid #1f232926;
+    border-right: 1px solid #d7d7d7;
     overflow: visible;
     &.retract {
       display: none;

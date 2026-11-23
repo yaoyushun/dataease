@@ -5,14 +5,12 @@ import {
   Injector,
   IResourceManagerService,
   IUniverInstanceService,
-  LocaleService,
   UniverInstanceType
 } from '@univerjs/core'
 import { SetWorksheetActiveOperation } from '@univerjs/sheets'
 import {
   BuiltInUIPart,
   ComponentManager,
-  IconManager,
   IMenuManagerService,
   ISidebarService,
   IUIPartsService,
@@ -20,10 +18,7 @@ import {
 } from '@univerjs/ui'
 import SpreadsheetQueryBar from '../components/SpreadsheetQueryBar.vue'
 import DataEaseQueryControlIcon from '../components/DataEaseQueryControlIcon.vue'
-import {
-  createToggleSpreadsheetFilterOperation,
-  TOGGLE_SPREADSHEET_FILTER_OPERATION_ID
-} from '../commands/operations'
+import { ToggleSpreadsheetFilterOperation } from '../commands/operations'
 import { ToggleSpreadsheetFilterMenuFactory } from './menu'
 import { FILTER_PLUGIN_RESOURCE_NAME } from '../../../utils/plugin-resource'
 import { FilterInstanceService } from '../services/filter-instance.service'
@@ -80,7 +75,6 @@ export class DataEaseFilterController extends Disposable {
     @ISidebarService private readonly _sidebarService: ISidebarService,
     @IUIPartsService private readonly _uiPartsService: IUIPartsService,
     @Inject(ComponentManager) private readonly _componentManager: ComponentManager,
-    @Inject(IconManager) private readonly _iconManager: IconManager,
     @Inject(IResourceManagerService) private readonly _resourceManagerService: IResourceManagerService,
     @Inject(IUniverInstanceService)
     private readonly _univerInstanceService: IUniverInstanceService,
@@ -102,10 +96,7 @@ export class DataEaseFilterController extends Disposable {
   }
 
   private _initCommands(): void {
-    const toggle = createToggleSpreadsheetFilterOperation(unitId =>
-      this._resolveValuesReady(unitId)
-    )
-    this.disposeWithMe(this._commandService.registerCommand(toggle))
+    this.disposeWithMe(this._commandService.registerCommand(ToggleSpreadsheetFilterOperation))
   }
 
   private _initSheetSwitchListener(): void {
@@ -131,7 +122,6 @@ export class DataEaseFilterController extends Disposable {
 
   private _initComponents(): void {
     const mode = this._spreadsheetModeService.getMode()
-    const localeService = this._injector.get(LocaleService)
     const { createElement, useEffect, useRef } = this._componentManager.reactUtils
     const QueryBarHost = () => {
       const containerRef = useRef<HTMLElement | null>(null)
@@ -157,16 +147,6 @@ export class DataEaseFilterController extends Disposable {
         framework: 'vue3'
       })
     )
-    const QueryControlIcon = this._componentManager.get('DataEaseQueryControlIcon')
-    // IconManager 接收 React 组件，复用 ComponentManager 的 Vue 适配结果。
-    this.disposeWithMe(
-      this._iconManager.register('DataEaseQueryControlIcon', props =>
-        createElement(QueryControlIcon, {
-          ...props,
-          label: localeService.t('dataease-spreadsheet.menu.queryControlShort')
-        })
-      )
-    )
     this.disposeWithMe(
       this._componentManager.register(SPREADSHEET_QUERY_BAR_COMPONENT, QueryBarHost)
     )
@@ -175,7 +155,7 @@ export class DataEaseFilterController extends Disposable {
   private _initMenus(): void {
     this._menuManagerService.mergeMenu({
       [RibbonStartGroup.OTHERS]: {
-        [TOGGLE_SPREADSHEET_FILTER_OPERATION_ID]: {
+        [ToggleSpreadsheetFilterOperation.id]: {
           order: 20,
           menuItemFactory: ToggleSpreadsheetFilterMenuFactory
         }
